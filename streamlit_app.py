@@ -10,6 +10,21 @@ st.set_page_config(page_title="Axioms AI System", page_icon="⚙️")
 st.title("Axioms AI System")
 st.caption("Human-governed foundation MVP — drafts remain pending until you approve them.")
 
+with st.expander("System integration readiness", expanded=False):
+    readiness_response = requests.get(f"{API_URL}/system/readiness", timeout=20)
+    readiness_response.raise_for_status()
+    readiness = readiness_response.json()
+    st.write(f"Implemented specialist agents: {readiness['specialist_agent_count']}")
+    st.caption("External actions are disabled; human approval remains mandatory.")
+    st.dataframe(
+        [
+            {"Component": item["name"], "State": item["state"], "Detail": item["detail"]}
+            for item in readiness["components"]
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+
 with st.expander("Create a structured lecture plan", expanded=True):
     with st.form("lecture-plan"):
         lecture_topic = st.text_input("Lecture topic", value="Spectral Graph Theory")

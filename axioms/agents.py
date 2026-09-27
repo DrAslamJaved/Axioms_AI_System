@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from axioms.agent_registry import profile_for
 from axioms.models import AgentName, Deliverable, TaskRequest
 
 
@@ -110,3 +111,27 @@ def autoeval_draft(request: TaskRequest) -> Deliverable:
 - AutoEval cannot approve, publish, schedule, reconfigure other agents, or make external changes.
 """
     return Deliverable(title=title, agent=AgentName.AUTOEVAL, content=content)
+
+
+def specialist_draft(request: TaskRequest, agent: AgentName) -> Deliverable:
+    """Create a safe Core hand-off when a specialised endpoint needs typed inputs."""
+    profile = profile_for(agent)
+    title = f"{profile.label} planning draft: {request.goal}"
+    content = f"""# {title}
+
+## Intended specialist
+- Capability: {profile.purpose}
+- Typed endpoint: `{profile.endpoint}`
+- Audience: {request.audience}
+- Deadline: {request.deadline or 'not supplied'}
+
+## Required human preparation
+1. Supply typed inputs and author-approved source scope.
+2. Review factual, data-governance, and release constraints.
+3. Obtain explicit approval before any external or public-facing action.
+
+## Safety boundary
+- This is a routing hand-off, not a completed specialist deliverable.
+- No external action, publication, schedule, account access, or data release is performed.
+"""
+    return Deliverable(title=title, agent=agent, content=content)

@@ -27,6 +27,8 @@ from axioms.api import (
     create_social_media_package_docx,
     create_writing_draft,
     create_writing_draft_docx,
+    list_agents,
+    system_readiness,
 )
 
 
@@ -245,3 +247,11 @@ def test_autoeval_docx_handler_returns_a_word_document(tmp_path: Path, monkeypat
     monkeypatch.chdir(tmp_path)
     response = create_autoeval_report_docx(autoeval_payload())
     assert Path(response.path).read_bytes()[:2] == b"PK"
+
+
+def test_system_integration_handlers_expose_profiles_and_deferrals() -> None:
+    agents = list_agents()
+    readiness = system_readiness()
+    assert len(agents) == 8
+    assert readiness["specialist_agent_count"] == 8
+    assert not readiness["external_actions_enabled"]

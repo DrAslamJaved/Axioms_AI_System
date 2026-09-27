@@ -46,3 +46,16 @@ def test_autoeval_request_routes_to_non_reconfiguring_agent(tmp_path: Path) -> N
     record = core.create_task(TaskRequest(goal="Run a quality assurance evaluation on this artifact"))
     assert [task.agent for task in record.subtasks] == [AgentName.AUTOEVAL]
     assert "cannot approve" in record.deliverables[0].content
+
+
+def test_core_routes_remaining_specialists_to_typed_endpoint_handoffs(tmp_path: Path) -> None:
+    core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    record = core.create_task(
+        TaskRequest(goal="Research literature and prepare a quiz plus a YouTube video")
+    )
+    assert {task.agent for task in record.subtasks} == {
+        AgentName.RESEARCH,
+        AgentName.ASSESSMENT,
+        AgentName.CONTENT,
+    }
+    assert all("Typed endpoint" in item.content for item in record.deliverables)

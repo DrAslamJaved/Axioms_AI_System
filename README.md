@@ -17,6 +17,15 @@ GitHub, call paid LLM APIs, or claim to verify citations. Those capabilities rem
 disabled until their individual integration, tests, permissions, and approval policy are
 implemented.
 
+## System Integration and Readiness
+
+The Core now exposes the eight implemented specialist capabilities through `GET /agents` and a
+truthful implementation/deferred-infrastructure report through `GET /system/readiness`. This
+keeps the completed MVP auditable: Core routing, SQLite task episodes, FastAPI, Streamlit, Docker
+configuration, and approval boundaries are implemented; Redis Streams, semantic retrieval,
+LangGraph, live external connectors, and cloud deployment remain explicitly deferred. See
+[docs/system_integration.md](docs/system_integration.md).
+
 ## Architecture
 
 ```mermaid
