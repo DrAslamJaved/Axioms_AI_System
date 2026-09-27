@@ -3,12 +3,20 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from axioms.core import AxiomsCore
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.models import ApprovalDecision, TaskRequest
+from axioms.research_agent import (
+    EvidenceSource,
+    PublicationKind,
+    ResearchRequest,
+    VerificationStatus,
+    build_research_brief,
+)
+from axioms.research_agent import export_docx as export_research_docx
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
@@ -62,6 +70,45 @@ class WritingDraftIn(BaseModel):
         data["verified_facts"] = tuple(self.verified_facts)
         data["references"] = tuple(self.references)
         return WritingRequest(**data)
+
+
+class EvidenceSourceIn(BaseModel):
+    source_id: str = Field(min_length=1, max_length=50)
+    title: str = Field(min_length=2, max_length=1000)
+    authors: list[str] = Field(min_length=1, max_length=30)
+    year: int = Field(ge=1600, le=2100)
+    publication_kind: PublicationKind
+    doi: str | None = Field(default=None, max_length=500)
+    url: str | None = Field(default=None, max_length=2000)
+    peer_reviewed: bool = False
+    supported_claim: str | None = Field(default=None, max_length=2000)
+    verification_status: VerificationStatus = VerificationStatus.UNVERIFIED
+    verification_evidence: str | None = Field(default=None, max_length=2000)
+
+    def to_evidence_source(self) -> EvidenceSource:
+        data = self.model_dump()
+        data["authors"] = tuple(self.authors)
+        return EvidenceSource(**data)
+
+
+class ResearchBriefIn(BaseModel):
+    research_question: str = Field(min_length=8, max_length=4000)
+    scope: str = Field(min_length=5, max_length=4000)
+    sources: list[EvidenceSourceIn] = Field(min_length=1, max_length=100)
+    analysis_dimensions: list[str] = Field(
+        default_factory=lambda: ["methods", "datasets", "metrics", "limitations"],
+        min_length=1,
+        max_length=10,
+    )
+    target_venue: str | None = Field(default=None, max_length=300)
+
+    def to_agent_request(self) -> ResearchRequest:
+        data = self.model_dump(exclude={"sources", "analysis_dimensions"})
+        return ResearchRequest(
+            **data,
+            sources=tuple(source.to_evidence_source() for source in self.sources),
+            analysis_dimensions=tuple(self.analysis_dimensions),
+        )
 
 
 @app.get("/health")
@@ -118,6 +165,38 @@ def create_writing_draft_docx(payload: WritingDraftIn) -> FileResponse:
         filename="writing_draft.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+@app.post("/research-briefs")
+def create_research_brief(payload: ResearchBriefIn) -> dict:
+    try:
+        return build_research_brief(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/research-briefs/docx")
+def create_research_brief_docx(payload: ResearchBriefIn) -> FileResponse:
+    try:
+        brief = build_research_brief(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    destination = Path("artifacts") / "research_brief.docx"
+    export_research_docx(brief, destination)
+    return FileResponse(
+        destination,
+        filename="research_brief.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.post("/research-briefs/bibtex")
+def create_research_bibtex(payload: ResearchBriefIn) -> PlainTextResponse:
+    try:
+        brief = build_research_brief(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return PlainTextResponse(brief.verified_bibtex(), media_type="application/x-bibtex")
 
 
 @app.get("/tasks/{task_id}")

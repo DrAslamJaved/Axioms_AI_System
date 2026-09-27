@@ -2,9 +2,13 @@ from pathlib import Path
 
 from axioms.api import (
     LecturePlanIn,
+    ResearchBriefIn,
     WritingDraftIn,
     create_lecture_plan,
     create_lecture_plan_docx,
+    create_research_bibtex,
+    create_research_brief,
+    create_research_brief_docx,
     create_writing_draft,
     create_writing_draft_docx,
 )
@@ -64,3 +68,37 @@ def test_writing_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatc
     document = Path(response.path)
     assert document.exists()
     assert document.read_bytes()[:2] == b"PK"
+
+
+def research_payload() -> ResearchBriefIn:
+    return ResearchBriefIn(
+        research_question="How can fuzzy similarity measures support drug-drug interaction prediction?",
+        scope="Compare methods and limitations.",
+        sources=[
+            {
+                "source_id": "S01",
+                "title": "A verified source record",
+                "authors": ["Javed"],
+                "year": 2026,
+                "publication_kind": "journal_article",
+                "doi": "10.1000/example.doi",
+                "peer_reviewed": True,
+                "supported_claim": "A source-linked claim.",
+                "verification_status": "claim_verified",
+                "verification_evidence": "Author checked the record and claim.",
+            }
+        ],
+    )
+
+
+def test_research_brief_handler_exposes_verification_state() -> None:
+    body = create_research_brief(research_payload())
+    assert body["source_audit"][0]["synthesis_eligible"]
+
+
+def test_research_export_handlers_return_docx_and_bibtex(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    docx_response = create_research_brief_docx(research_payload())
+    assert Path(docx_response.path).read_bytes()[:2] == b"PK"
+    bibtex_response = create_research_bibtex(research_payload())
+    assert "10.1000/example.doi" in bibtex_response.body.decode()

@@ -1,3 +1,4 @@
+import json
 import os
 
 import requests
@@ -94,6 +95,71 @@ if draft:
     st.markdown("**Evidence review before use**")
     for item in draft["evidence_checklist"]:
         st.checkbox(item, key=f"evidence_{item}")
+
+with st.expander("Create an evidence-first research brief", expanded=True):
+    with st.form("research-brief"):
+        research_question = st.text_area(
+            "Research question",
+            value="How can fuzzy similarity measures support drug-drug interaction prediction?",
+        )
+        research_scope = st.text_area(
+            "Scope",
+            value="Map methods, datasets, metrics, limitations, and research gaps using author-entered source records.",
+        )
+        sources_json = st.text_area(
+            "Evidence sources (JSON array)",
+            value='''[
+  {
+    "source_id": "S01",
+    "title": "Author-verified example record",
+    "authors": ["Author"],
+    "year": 2026,
+    "publication_kind": "journal_article",
+    "doi": "10.1000/example.doi",
+    "peer_reviewed": true,
+    "supported_claim": "Replace with an author-verified, source-linked claim.",
+    "verification_status": "claim_verified",
+    "verification_evidence": "Author checked the bibliographic metadata and claim against the source."
+  }
+]''',
+            height=270,
+        )
+        research_submitted = st.form_submit_button("Build evidence-first research brief")
+
+    if research_submitted:
+        try:
+            sources = json.loads(sources_json)
+        except json.JSONDecodeError as error:
+            st.error(f"The source JSON is invalid: {error.msg}")
+        else:
+            response = requests.post(
+                f"{API_URL}/research-briefs",
+                json={"research_question": research_question, "scope": research_scope, "sources": sources},
+                timeout=20,
+            )
+            response.raise_for_status()
+            st.session_state["research_brief"] = response.json()
+
+brief = st.session_state.get("research_brief")
+if brief:
+    st.subheader("Evidence-first research brief")
+    st.caption("Only claim-verified records are eligible for constrained synthesis.")
+    st.dataframe(
+        [
+            {
+                "Source": item["source_id"],
+                "Verification": item["verification_status"],
+                "Synthesis eligible": item["synthesis_eligible"],
+                "Finding": item["finding"],
+            }
+            for item in brief["source_audit"]
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.markdown("**Verification queue**")
+    for item in brief["verification_queue"]:
+        st.write(f"- {item}")
 
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")

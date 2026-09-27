@@ -81,6 +81,14 @@ author-verified facts, distinguishes evidence checking from similarity review, a
 sends or publishes content. `POST /writing-drafts/docx` exports the draft as a DOCX file.
 See [docs/writing_agent.md](docs/writing_agent.md) for the full contract.
 
+## Research Agent
+
+`POST /research-briefs` creates a claim-level evidence ledger from author-entered source
+records. Only sources marked `claim_verified` can support constrained factual synthesis;
+unverified and rejected records remain visible in the audit trail. DOCX and safe BibTeX
+exports are available at `POST /research-briefs/docx` and `POST /research-briefs/bibtex`.
+See [docs/research_agent.md](docs/research_agent.md) for verification states and connector limits.
+
 ## Deployment
 
 Local Docker deployment and the GitHub release checklist are in
