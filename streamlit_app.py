@@ -54,6 +54,47 @@ if plan:
     for item in plan["review_checklist"]:
         st.checkbox(item, key=f"review_{item}")
 
+with st.expander("Create a structured writing draft", expanded=True):
+    with st.form("writing-draft"):
+        document_type = st.selectbox(
+            "Document type",
+            ["email", "report", "paper_section", "recommendation_letter", "grant_section", "public_article"],
+        )
+        writing_subject = st.text_input("Subject or working title", value="Research collaboration update")
+        writing_audience = st.text_input("Audience", value="Academic collaborator")
+        writing_purpose = st.text_area("Purpose", value="Provide a concise, evidence-backed update and agree the next step.")
+        key_points = st.text_area("Key points (one per line)", value="State the current progress.\nExplain the proposed next step.")
+        verified_facts = st.text_area("Verified facts (one per line)", value="The project materials have been reviewed by the author.")
+        tone = st.text_input("Tone", value="clear, precise, approachable, and intellectually rigorous")
+        draft_submitted = st.form_submit_button("Generate reviewed writing draft")
+
+    if draft_submitted:
+        payload = {
+            "document_type": document_type,
+            "subject": writing_subject,
+            "audience": writing_audience,
+            "purpose": writing_purpose,
+            "key_points": [item.strip() for item in key_points.splitlines() if item.strip()],
+            "verified_facts": [item.strip() for item in verified_facts.splitlines() if item.strip()],
+            "tone": tone,
+        }
+        response = requests.post(f"{API_URL}/writing-drafts", json=payload, timeout=20)
+        response.raise_for_status()
+        st.session_state["writing_draft"] = response.json()
+
+draft = st.session_state.get("writing_draft")
+if draft:
+    st.subheader(f"Writing draft: {draft['request']['subject']}")
+    st.caption("Author review is required before any external delivery.")
+    if draft["subject_line"]:
+        st.markdown(f"**Suggested subject:** {draft['subject_line']}")
+    for section in draft["sections"]:
+        st.markdown(f"**{section['heading']}**")
+        st.write(section["content"])
+    st.markdown("**Evidence review before use**")
+    for item in draft["evidence_checklist"]:
+        st.checkbox(item, key=f"evidence_{item}")
+
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")
     audience = st.text_input("Audience", value="unspecified")
