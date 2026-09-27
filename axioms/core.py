@@ -9,6 +9,7 @@ from axioms.agents import (
     writing_draft,
 )
 from axioms.models import AgentName, ApprovalDecision, TaskRecord, TaskRequest, TaskStatus
+from axioms.personal_kb import PersonalKnowledgeStore
 from axioms.policy import assess_request
 from axioms.routing import build_task_graph
 from axioms.store import TaskStore
@@ -17,8 +18,9 @@ from axioms.store import TaskStore
 class AxiomsCore:
     """Small, auditable orchestrator. Tool use and LLMs are intentionally not enabled here."""
 
-    def __init__(self, store: TaskStore | None = None) -> None:
+    def __init__(self, store: TaskStore | None = None, kb_store: PersonalKnowledgeStore | None = None) -> None:
         self.store = store or TaskStore()
+        self.kb_store = kb_store or PersonalKnowledgeStore(self.store.path)
 
     def create_task(self, request: TaskRequest) -> TaskRecord:
         record = TaskRecord(request=request, subtasks=build_task_graph(request))

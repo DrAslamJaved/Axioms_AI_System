@@ -4,8 +4,11 @@ from axioms.api import (
     AssessmentBlueprintIn,
     AutoEvalReportIn,
     ContentPackageIn,
+    FeedbackIn,
     LecturePlanIn,
     PortfolioPackageIn,
+    PreferenceProposalIn,
+    ProposalDecisionIn,
     ResearchBriefIn,
     SocialMediaPackageIn,
     WritingDraftIn,
@@ -20,6 +23,7 @@ from axioms.api import (
     create_lecture_plan_docx,
     create_portfolio_package,
     create_portfolio_package_docx,
+    create_preference_proposal,
     create_research_bibtex,
     create_research_brief,
     create_research_brief_docx,
@@ -27,7 +31,9 @@ from axioms.api import (
     create_social_media_package_docx,
     create_writing_draft,
     create_writing_draft_docx,
+    decide_preference_proposal,
     list_agents,
+    list_personal_kb_entries,
     system_readiness,
 )
 
@@ -255,3 +261,29 @@ def test_system_integration_handlers_expose_profiles_and_deferrals() -> None:
     assert len(agents) == 8
     assert readiness["specialist_agent_count"] == 8
     assert not readiness["external_actions_enabled"]
+
+
+def test_personal_kb_handler_requires_a_recorded_approval() -> None:
+    pending = create_preference_proposal(
+        PreferenceProposalIn(
+            category="teaching_style",
+            preference_key="example_sequence",
+            preference_value="Start with intuition.",
+            rationale="Owner preference for teaching materials.",
+        )
+    )
+    assert pending["decision"] is None
+    decided = decide_preference_proposal(
+        pending["proposal_id"], ProposalDecisionIn(decision="approve", note="Reviewed")
+    )
+    assert decided["decision"] == "approve"
+    assert any(item["preference_key"] == "example_sequence" for item in list_personal_kb_entries())
+
+
+def test_feedback_handler_records_explicit_feedback_only() -> None:
+    from axioms.api import record_feedback
+
+    feedback = record_feedback(
+        FeedbackIn(agent="lecture_design", artifact_reference="lecture_plan_v1", rating=5)
+    )
+    assert feedback["rating"] == 5

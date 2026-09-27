@@ -26,6 +26,15 @@ configuration, and approval boundaries are implemented; Redis Streams, semantic 
 LangGraph, live external connectors, and cloud deployment remain explicitly deferred. See
 [docs/system_integration.md](docs/system_integration.md).
 
+## Personal Knowledge Base Governance
+
+`POST /feedback` records explicit per-delivery feedback without changing system preferences.
+`POST /personal-kb/proposals` creates a pending preference proposal, and
+`POST /personal-kb/proposals/{proposal_id}/decision` records the owner's approval or rejection.
+Only approved proposals become visible through `GET /personal-kb/entries`. Student and personal
+identifiers are rejected from KB records; implicit edit tracking, automated preference extraction,
+and semantic retrieval remain deferred. See [docs/personal_kb.md](docs/personal_kb.md).
+
 ## Architecture
 
 ```mermaid

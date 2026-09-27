@@ -25,6 +25,53 @@ with st.expander("System integration readiness", expanded=False):
         use_container_width=True,
     )
 
+with st.expander("Personal Knowledge Base governance", expanded=False):
+    st.caption("Feedback is recorded separately. Preferences become active only after explicit approval.")
+    with st.form("personal-kb-proposal"):
+        kb_category = st.selectbox(
+            "Preference category",
+            ["teaching_style", "research_voice", "content_brand", "recurring_template"],
+        )
+        kb_key = st.text_input("Preference key", value="explanation_sequence")
+        kb_value = st.text_input("Preference value", value="intuition → formal development → application")
+        kb_rationale = st.text_area("Rationale", value="Proposed explicitly by the owner for future drafts.")
+        kb_submitted = st.form_submit_button("Create approval-required KB proposal")
+    if kb_submitted:
+        response = requests.post(
+            f"{API_URL}/personal-kb/proposals",
+            json={
+                "category": kb_category,
+                "preference_key": kb_key,
+                "preference_value": kb_value,
+                "rationale": kb_rationale,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        st.session_state["kb_proposal"] = response.json()
+    proposal = st.session_state.get("kb_proposal")
+    if proposal:
+        st.info(f"Proposal {proposal['proposal_id']} is pending your approval.")
+        approve, reject = st.columns(2)
+        if approve.button("Approve KB proposal"):
+            response = requests.post(
+                f"{API_URL}/personal-kb/proposals/{proposal['proposal_id']}/decision",
+                json={"decision": "approve", "note": "Approved by owner through review UI."},
+                timeout=20,
+            )
+            response.raise_for_status()
+            st.session_state["kb_proposal"] = response.json()
+            st.rerun()
+        if reject.button("Reject KB proposal"):
+            response = requests.post(
+                f"{API_URL}/personal-kb/proposals/{proposal['proposal_id']}/decision",
+                json={"decision": "reject", "note": "Rejected by owner through review UI."},
+                timeout=20,
+            )
+            response.raise_for_status()
+            st.session_state["kb_proposal"] = response.json()
+            st.rerun()
+
 with st.expander("Create a structured lecture plan", expanded=True):
     with st.form("lecture-plan"):
         lecture_topic = st.text_input("Lecture topic", value="Spectral Graph Theory")
