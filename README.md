@@ -6,7 +6,8 @@ This repository implements the **Phase 1 Foundation MVP** from the architecture
 specification. It deliberately starts with a small, auditable surface:
 
 - Axioms Core converts an approved request into a typed task plan.
-- Lecture Design and Writing & Communication agents produce transparent draft templates.
+- The Lecture Design Agent produces a duration-accurate, reviewable lesson plan and DOCX
+  export; Writing & Communication produces transparent draft templates.
 - Every external or public-facing deliverable is held for explicit approval.
 - SQLite stores task episodes and an approved Personal Knowledge Base (PKB).
 - FastAPI exposes the service and Streamlit provides a lightweight review console.
@@ -64,6 +65,14 @@ curl -X POST http://127.0.0.1:8000/tasks \
 Use `GET /tasks/{task_id}` to inspect the plan and drafts. `POST /tasks/{task_id}/approval`
 requires a recorded human decision before a pending deliverable is marked approved.
 
+## Lecture Design Agent
+
+`POST /lecture-plans` accepts a topic, duration, learner profile, and learning outcomes.
+It returns a timed plan following the teaching sequence **intuition → formal development
+→ worked example → guided application → retrieval check**. The segments always sum to the
+requested duration. `POST /lecture-plans/docx` returns the reviewed plan as a DOCX file.
+See [docs/lecture_agent.md](docs/lecture_agent.md) for the full contract.
+
 ## Deployment
 
 Local Docker deployment and the GitHub release checklist are in
@@ -86,4 +95,3 @@ with real keys or enable external integrations until the security checklist is c
 - A source is never labelled verified without a recorded verification result.
 - PKB changes are proposals until approved by the owner.
 - Secrets remain in the deployment environment, never in Git.
-
