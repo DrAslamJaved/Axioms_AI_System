@@ -89,6 +89,14 @@ unverified and rejected records remain visible in the audit trail. DOCX and safe
 exports are available at `POST /research-briefs/docx` and `POST /research-briefs/bibtex`.
 See [docs/research_agent.md](docs/research_agent.md) for verification states and connector limits.
 
+## Assessment Design Agent
+
+`POST /assessment-blueprints` builds a source-bounded instructor blueprint that maps each
+question framework to a learning outcome, Bloom level, difficulty, mark allocation, rubric,
+and qualitative AI-resilience review. Separate DOCX endpoints produce student-facing and
+instructor-facing materials, preventing rubrics and solution guides from reaching students.
+See [docs/assessment_agent.md](docs/assessment_agent.md) for the full governance contract.
+
 ## Deployment
 
 Local Docker deployment and the GitHub release checklist are in
