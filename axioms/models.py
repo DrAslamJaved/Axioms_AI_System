@@ -9,10 +9,13 @@ from uuid import uuid4
 
 class AgentName(StrEnum):
     CORE = "axioms_core"
+    RESEARCH = "research"
+    PORTFOLIO = "stem_ai_portfolio"
     LECTURE = "lecture_design"
+    ASSESSMENT = "assessment_design"
+    CONTENT = "content_creation"
     WRITING = "writing_communication"
     SOCIAL_MEDIA = "social_media"
-    PORTFOLIO = "stem_ai_portfolio"
     AUTOEVAL = "autoeval"
 
 

@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from axioms.agent_registry import specialist_profiles
 from axioms.assessment_agent import (
     AssessmentRequest,
     AssessmentType,
@@ -25,6 +26,7 @@ from axioms.autoeval_agent import export_docx as export_autoeval_docx
 from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, build_content_package
 from axioms.content_agent import export_docx as export_content_docx
 from axioms.core import AxiomsCore
+from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.models import ApprovalDecision, TaskRequest
 from axioms.portfolio_agent import (
@@ -286,6 +288,16 @@ class AutoEvalReportIn(BaseModel):
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "human-governed-mvp"}
+
+
+@app.get("/agents")
+def list_agents() -> list[dict]:
+    return [profile.to_dict() for profile in specialist_profiles()]
+
+
+@app.get("/system/readiness")
+def system_readiness() -> dict:
+    return build_system_readiness_report().to_dict()
 
 
 @app.post("/tasks")

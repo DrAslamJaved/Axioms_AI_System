@@ -5,6 +5,7 @@ from axioms.agents import (
     lecture_draft,
     portfolio_draft,
     social_media_draft,
+    specialist_draft,
     writing_draft,
 )
 from axioms.models import AgentName, ApprovalDecision, TaskRecord, TaskRequest, TaskStatus
@@ -32,6 +33,8 @@ class AxiomsCore:
                 record.deliverables.append(portfolio_draft(request))
             elif subtask.agent is AgentName.AUTOEVAL:
                 record.deliverables.append(autoeval_draft(request))
+            elif subtask.agent in {AgentName.RESEARCH, AgentName.ASSESSMENT, AgentName.CONTENT}:
+                record.deliverables.append(specialist_draft(request, subtask.agent))
         policy = assess_request(request)
         record.status = TaskStatus.PENDING_APPROVAL if policy.requires_approval else TaskStatus.PLANNED
         self.store.save(record)
