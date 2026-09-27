@@ -28,7 +28,13 @@ from axioms.content_agent import export_docx as export_content_docx
 from axioms.core import AxiomsCore
 from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
-from axioms.models import ApprovalDecision, TaskRequest
+from axioms.models import AgentName, ApprovalDecision, TaskRequest
+from axioms.personal_kb import (
+    FeedbackRecord,
+    PreferenceCategory,
+    PreferenceProposal,
+    ProposalDecision,
+)
 from axioms.portfolio_agent import (
     DataAccessLevel,
     DatasetAsset,
@@ -285,6 +291,32 @@ class AutoEvalReportIn(BaseModel):
         return AutoEvalRequest(**data)
 
 
+class FeedbackIn(BaseModel):
+    agent: AgentName
+    artifact_reference: str = Field(min_length=2, max_length=500)
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
+
+    def to_record(self) -> FeedbackRecord:
+        return FeedbackRecord(**self.model_dump())
+
+
+class PreferenceProposalIn(BaseModel):
+    category: PreferenceCategory
+    preference_key: str = Field(min_length=2, max_length=100)
+    preference_value: str = Field(min_length=2, max_length=1000)
+    rationale: str = Field(min_length=5, max_length=2000)
+    feedback_id: str | None = Field(default=None, max_length=100)
+
+    def to_proposal(self) -> PreferenceProposal:
+        return PreferenceProposal(**self.model_dump())
+
+
+class ProposalDecisionIn(BaseModel):
+    decision: ProposalDecision
+    note: str | None = Field(default=None, max_length=2000)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "human-governed-mvp"}
@@ -298,6 +330,37 @@ def list_agents() -> list[dict]:
 @app.get("/system/readiness")
 def system_readiness() -> dict:
     return build_system_readiness_report().to_dict()
+
+
+@app.post("/feedback")
+def record_feedback(payload: FeedbackIn) -> dict:
+    try:
+        return core.kb_store.record_feedback(payload.to_record())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/personal-kb/proposals")
+def create_preference_proposal(payload: PreferenceProposalIn) -> dict:
+    try:
+        return core.kb_store.propose(payload.to_proposal())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/personal-kb/proposals/{proposal_id}/decision")
+def decide_preference_proposal(proposal_id: str, payload: ProposalDecisionIn) -> dict:
+    try:
+        return core.kb_store.decide(proposal_id, payload.decision, payload.note)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Personal KB proposal not found") from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.get("/personal-kb/entries")
+def list_personal_kb_entries() -> list[dict]:
+    return core.kb_store.entries()
 
 
 @app.post("/tasks")
