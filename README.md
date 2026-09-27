@@ -7,7 +7,7 @@ specification. It deliberately starts with a small, auditable surface:
 
 - Axioms Core converts an approved request into a typed task plan.
 - The Lecture Design Agent produces a duration-accurate, reviewable lesson plan and DOCX
-  export; Writing & Communication produces transparent draft templates.
+  export; Writing & Communication produces evidence-aware, author-reviewable drafts and DOCX exports.
 - Every external or public-facing deliverable is held for explicit approval.
 - SQLite stores task episodes and an approved Personal Knowledge Base (PKB).
 - FastAPI exposes the service and Streamlit provides a lightweight review console.
@@ -72,6 +72,14 @@ It returns a timed plan following the teaching sequence **intuition → formal d
 → worked example → guided application → retrieval check**. The segments always sum to the
 requested duration. `POST /lecture-plans/docx` returns the reviewed plan as a DOCX file.
 See [docs/lecture_agent.md](docs/lecture_agent.md) for the full contract.
+
+## Writing & Communication Agent
+
+`POST /writing-drafts` creates an author-reviewable framework for emails, reports, paper
+sections, recommendation letters, grant sections, and public articles. It requires
+author-verified facts, distinguishes evidence checking from similarity review, and never
+sends or publishes content. `POST /writing-drafts/docx` exports the draft as a DOCX file.
+See [docs/writing_agent.md](docs/writing_agent.md) for the full contract.
 
 ## Deployment
 
