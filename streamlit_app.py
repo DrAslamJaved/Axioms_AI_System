@@ -161,6 +161,69 @@ if brief:
     for item in brief["verification_queue"]:
         st.write(f"- {item}")
 
+with st.expander("Create an instructor assessment blueprint", expanded=True):
+    with st.form("assessment-blueprint"):
+        assessment_topic = st.text_input("Assessment topic", value="Spectral Graph Theory")
+        assessment_level = st.selectbox("Assessment course level", ["Undergraduate", "Graduate"])
+        assessment_type = st.selectbox("Assessment type", ["quiz", "assignment", "class_activity", "midterm", "final"])
+        assessment_duration = st.slider("Assessment duration (minutes)", 10, 240, 30, step=5)
+        assessment_marks = st.number_input("Total marks", min_value=1, max_value=500, value=20)
+        assessment_questions = st.slider("Question count", 1, 2 if assessment_type == "quiz" else 20, 2)
+        outcomes = st.text_area(
+            "Learning outcomes (one per line)",
+            value="Explain the role of graph matrices.\nApply a spectral method to a small graph.",
+        )
+        source_scope = st.text_area(
+            "Approved course-source scope",
+            value="Instructor-approved lecture notes on graph matrices and spectral methods.",
+        )
+        assessment_submitted = st.form_submit_button("Build reviewed assessment blueprint")
+
+    if assessment_submitted:
+        outcome_items = [item.strip() for item in outcomes.splitlines() if item.strip()]
+        payload = {
+            "topic": assessment_topic,
+            "course_level": assessment_level,
+            "assessment_type": assessment_type,
+            "duration_minutes": assessment_duration,
+            "total_marks": assessment_marks,
+            "question_count": assessment_questions,
+            "learning_outcomes": [
+                {
+                    "outcome_id": f"LO{index + 1}",
+                    "text": outcome,
+                    "bloom_level": "understand" if index == 0 else "apply",
+                }
+                for index, outcome in enumerate(outcome_items)
+            ],
+            "approved_source_scope": source_scope,
+        }
+        response = requests.post(f"{API_URL}/assessment-blueprints", json=payload, timeout=20)
+        response.raise_for_status()
+        st.session_state["assessment_blueprint"] = response.json()
+
+assessment = st.session_state.get("assessment_blueprint")
+if assessment:
+    st.subheader(f"Assessment blueprint: {assessment['request']['topic']}")
+    st.caption("Instructor review is required. Student-facing materials contain no rubrics or solutions.")
+    st.dataframe(
+        [
+            {
+                "Question": item["number"],
+                "Outcome": item["outcome_id"],
+                "Bloom": item["bloom_level"],
+                "Difficulty": item["difficulty"],
+                "Marks": item["marks"],
+            }
+            for item in assessment["questions"]
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.markdown("**AI-resilience review**")
+    for item in assessment["ai_resilience_review"]:
+        st.write(f"- {item}")
+
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")
     audience = st.text_input("Audience", value="unspecified")

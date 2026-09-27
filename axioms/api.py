@@ -6,6 +6,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from axioms.assessment_agent import (
+    AssessmentRequest,
+    AssessmentType,
+    BloomLevel,
+    Difficulty,
+    LearningOutcome,
+    build_assessment_blueprint,
+    export_instructor_docx,
+    export_student_docx,
+)
 from axioms.core import AxiomsCore
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.models import ApprovalDecision, TaskRequest
@@ -111,6 +121,38 @@ class ResearchBriefIn(BaseModel):
         )
 
 
+class LearningOutcomeIn(BaseModel):
+    outcome_id: str = Field(min_length=1, max_length=50)
+    text: str = Field(min_length=5, max_length=1000)
+    bloom_level: BloomLevel
+
+    def to_learning_outcome(self) -> LearningOutcome:
+        return LearningOutcome(**self.model_dump())
+
+
+class AssessmentBlueprintIn(BaseModel):
+    topic: str = Field(min_length=2, max_length=300)
+    course_level: str = Field(min_length=2, max_length=100)
+    assessment_type: AssessmentType
+    duration_minutes: int = Field(ge=10, le=240)
+    total_marks: int = Field(ge=1, le=500)
+    question_count: int = Field(ge=1, le=20)
+    learning_outcomes: list[LearningOutcomeIn] = Field(min_length=1, max_length=12)
+    approved_source_scope: str = Field(min_length=5, max_length=4000)
+    difficulties: list[Difficulty] = Field(default_factory=lambda: [Difficulty.MODERATE])
+    require_handwritten_work: bool = True
+    require_reflection: bool = True
+    include_personalised_context: bool = True
+
+    def to_agent_request(self) -> AssessmentRequest:
+        data = self.model_dump(exclude={"learning_outcomes", "difficulties"})
+        return AssessmentRequest(
+            **data,
+            learning_outcomes=tuple(item.to_learning_outcome() for item in self.learning_outcomes),
+            difficulties=tuple(self.difficulties),
+        )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "human-governed-mvp"}
@@ -197,6 +239,44 @@ def create_research_bibtex(payload: ResearchBriefIn) -> PlainTextResponse:
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return PlainTextResponse(brief.verified_bibtex(), media_type="application/x-bibtex")
+
+
+@app.post("/assessment-blueprints")
+def create_assessment_blueprint(payload: AssessmentBlueprintIn) -> dict:
+    try:
+        return build_assessment_blueprint(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/assessment-blueprints/student-docx")
+def create_assessment_student_docx(payload: AssessmentBlueprintIn) -> FileResponse:
+    try:
+        blueprint = build_assessment_blueprint(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    destination = Path("artifacts") / "student_assessment_blueprint.docx"
+    export_student_docx(blueprint, destination)
+    return FileResponse(
+        destination,
+        filename="student_assessment_blueprint.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.post("/assessment-blueprints/instructor-docx")
+def create_assessment_instructor_docx(payload: AssessmentBlueprintIn) -> FileResponse:
+    try:
+        blueprint = build_assessment_blueprint(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    destination = Path("artifacts") / "instructor_assessment_blueprint.docx"
+    export_instructor_docx(blueprint, destination)
+    return FileResponse(
+        destination,
+        filename="instructor_assessment_blueprint.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
 
 @app.get("/tasks/{task_id}")

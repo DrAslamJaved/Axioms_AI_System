@@ -1,9 +1,13 @@
 from pathlib import Path
 
 from axioms.api import (
+    AssessmentBlueprintIn,
     LecturePlanIn,
     ResearchBriefIn,
     WritingDraftIn,
+    create_assessment_blueprint,
+    create_assessment_instructor_docx,
+    create_assessment_student_docx,
     create_lecture_plan,
     create_lecture_plan_docx,
     create_research_bibtex,
@@ -102,3 +106,32 @@ def test_research_export_handlers_return_docx_and_bibtex(tmp_path: Path, monkeyp
     assert Path(docx_response.path).read_bytes()[:2] == b"PK"
     bibtex_response = create_research_bibtex(research_payload())
     assert "10.1000/example.doi" in bibtex_response.body.decode()
+
+
+def assessment_payload() -> AssessmentBlueprintIn:
+    return AssessmentBlueprintIn(
+        topic="Spectral Graph Theory",
+        course_level="Graduate",
+        assessment_type="quiz",
+        duration_minutes=30,
+        total_marks=20,
+        question_count=2,
+        learning_outcomes=[
+            {"outcome_id": "LO1", "text": "Explain graph matrices.", "bloom_level": "understand"},
+            {"outcome_id": "LO2", "text": "Apply a spectral method.", "bloom_level": "apply"},
+        ],
+        approved_source_scope="Instructor-approved graph theory lecture notes.",
+    )
+
+
+def test_assessment_handler_has_exact_mark_allocation() -> None:
+    body = create_assessment_blueprint(assessment_payload())
+    assert sum(item["marks"] for item in body["questions"]) == 20
+
+
+def test_assessment_export_handlers_separate_student_and_instructor_docs(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    student = create_assessment_student_docx(assessment_payload())
+    instructor = create_assessment_instructor_docx(assessment_payload())
+    assert Path(student.path).read_bytes()[:2] == b"PK"
+    assert Path(instructor.path).read_bytes()[:2] == b"PK"
