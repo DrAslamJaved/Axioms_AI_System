@@ -16,6 +16,12 @@ from axioms.assessment_agent import (
     export_instructor_docx,
     export_student_docx,
 )
+from axioms.autoeval_agent import (
+    AutoEvalRequest,
+    EvaluatedAgent,
+    evaluate_deliverable,
+)
+from axioms.autoeval_agent import export_docx as export_autoeval_docx
 from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, build_content_package
 from axioms.content_agent import export_docx as export_content_docx
 from axioms.core import AxiomsCore
@@ -261,6 +267,22 @@ class PortfolioPackageIn(BaseModel):
         )
 
 
+class AutoEvalReportIn(BaseModel):
+    evaluated_agent: EvaluatedAgent
+    deliverable_title: str = Field(min_length=2, max_length=300)
+    artifact_text: str = Field(min_length=1, max_length=20000)
+    required_elements: list[str] = Field(min_length=1, max_length=20)
+    evidence_markers: list[str] = Field(default_factory=list, max_length=20)
+    public_facing: bool = False
+    declared_sensitive_data: bool = False
+
+    def to_agent_request(self) -> AutoEvalRequest:
+        data = self.model_dump()
+        data["required_elements"] = tuple(self.required_elements)
+        data["evidence_markers"] = tuple(self.evidence_markers)
+        return AutoEvalRequest(**data)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "human-governed-mvp"}
@@ -452,6 +474,29 @@ def create_portfolio_package_docx(payload: PortfolioPackageIn) -> FileResponse:
     return FileResponse(
         destination,
         filename="portfolio_package.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.post("/autoeval-reports")
+def create_autoeval_report(payload: AutoEvalReportIn) -> dict:
+    try:
+        return evaluate_deliverable(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/autoeval-reports/docx")
+def create_autoeval_report_docx(payload: AutoEvalReportIn) -> FileResponse:
+    try:
+        report = evaluate_deliverable(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    destination = Path("artifacts") / "autoeval_report.docx"
+    export_autoeval_docx(report, destination)
+    return FileResponse(
+        destination,
+        filename="autoeval_report.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 

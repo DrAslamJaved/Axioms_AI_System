@@ -389,6 +389,63 @@ if portfolio:
     for item in portfolio["reproducibility_checklist"]:
         st.checkbox(item, key=f"portfolio_{item}")
 
+with st.expander("Create an AutoEval review report", expanded=True):
+    with st.form("autoeval-report"):
+        evaluated_agent = st.selectbox(
+            "Evaluated agent",
+            [
+                "lecture_design",
+                "writing_communication",
+                "research",
+                "assessment_design",
+                "content_creation",
+                "social_media",
+                "stem_ai_portfolio",
+            ],
+        )
+        evaluation_title = st.text_input("Deliverable title", value="Spectral Graph Theory lecture plan")
+        evaluation_artifact = st.text_area(
+            "Artifact text to check",
+            value="This lecture plan includes intuition, a formal definition, and a worked example.",
+        )
+        required_elements = st.text_area(
+            "Required text markers (one per line)",
+            value="intuition\nformal definition\nworked example",
+        )
+        evidence_markers = st.text_area("Evidence markers (one per line, optional)")
+        public_facing = st.checkbox("This deliverable is public-facing")
+        sensitive_data = st.checkbox("Sensitive data is declared in the artifact")
+        autoeval_submitted = st.form_submit_button("Run deterministic review checks")
+
+    if autoeval_submitted:
+        payload = {
+            "evaluated_agent": evaluated_agent,
+            "deliverable_title": evaluation_title,
+            "artifact_text": evaluation_artifact,
+            "required_elements": [item.strip() for item in required_elements.splitlines() if item.strip()],
+            "evidence_markers": [item.strip() for item in evidence_markers.splitlines() if item.strip()],
+            "public_facing": public_facing,
+            "declared_sensitive_data": sensitive_data,
+        }
+        response = requests.post(f"{API_URL}/autoeval-reports", json=payload, timeout=20)
+        response.raise_for_status()
+        st.session_state["autoeval_report"] = response.json()
+
+autoeval = st.session_state.get("autoeval_report")
+if autoeval:
+    st.subheader(f"AutoEval report: {autoeval['request']['deliverable_title']}")
+    st.caption("Deterministic review signals only; human review remains mandatory.")
+    st.metric("Quality signal", f"{autoeval['quality_signal_percent']}%")
+    st.dataframe(
+        [
+            {"Check": item["name"], "Status": item["status"], "Detail": item["detail"]}
+            for item in autoeval["checks"]
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.warning(autoeval["review_boundary"])
+
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")
     audience = st.text_input("Audience", value="unspecified")

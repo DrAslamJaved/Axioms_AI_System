@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from axioms.agents import lecture_draft, portfolio_draft, social_media_draft, writing_draft
+from axioms.agents import (
+    autoeval_draft,
+    lecture_draft,
+    portfolio_draft,
+    social_media_draft,
+    writing_draft,
+)
 from axioms.models import AgentName, ApprovalDecision, TaskRecord, TaskRequest, TaskStatus
 from axioms.policy import assess_request
 from axioms.routing import build_task_graph
@@ -24,6 +30,8 @@ class AxiomsCore:
                 record.deliverables.append(social_media_draft(request))
             elif subtask.agent is AgentName.PORTFOLIO:
                 record.deliverables.append(portfolio_draft(request))
+            elif subtask.agent is AgentName.AUTOEVAL:
+                record.deliverables.append(autoeval_draft(request))
         policy = assess_request(request)
         record.status = TaskStatus.PENDING_APPROVAL if policy.requires_approval else TaskStatus.PLANNED
         self.store.save(record)
