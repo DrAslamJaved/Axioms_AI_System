@@ -1,0 +1,89 @@
+# Axioms AI System
+
+A human-governed multi-agent workspace for research, teaching, and professional writing.
+
+This repository implements the **Phase 1 Foundation MVP** from the architecture
+specification. It deliberately starts with a small, auditable surface:
+
+- Axioms Core converts an approved request into a typed task plan.
+- Lecture Design and Writing & Communication agents produce transparent draft templates.
+- Every external or public-facing deliverable is held for explicit approval.
+- SQLite stores task episodes and an approved Personal Knowledge Base (PKB).
+- FastAPI exposes the service and Streamlit provides a lightweight review console.
+
+It does **not** autonomously post online, send email, access student records, write to
+GitHub, call paid LLM APIs, or claim to verify citations. Those capabilities remain
+disabled until their individual integration, tests, permissions, and approval policy are
+implemented.
+
+## Architecture
+
+```mermaid
+flowchart TD
+  U["Professor request"] --> C["Axioms Core"]
+  C --> P["Typed task plan"]
+  P --> L["Lecture agent"]
+  P --> W["Writing agent"]
+  L --> A["Approval gate"]
+  W --> A
+  A --> D["Approved delivery"]
+  C <--> M["SQLite episode + PKB store"]
+```
+
+## Quick start
+
+```bash
+python -m venv .venv
+# Windows PowerShell: .\.venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+pip install -e ".[dev]"
+uvicorn axioms.api:app --reload
+```
+
+In a second terminal:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Run validation:
+
+```bash
+pytest
+ruff check .
+```
+
+## API example
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Prepare a 75-minute graduate lecture on spectral graph theory", "audience":"MS mathematics", "deadline":"2026-10-02"}'
+```
+
+Use `GET /tasks/{task_id}` to inspect the plan and drafts. `POST /tasks/{task_id}/approval`
+requires a recorded human decision before a pending deliverable is marked approved.
+
+## Deployment
+
+Local Docker deployment and the GitHub release checklist are in
+[docs/deployment.md](docs/deployment.md). Start with local Docker Compose; do not deploy
+with real keys or enable external integrations until the security checklist is complete.
+
+## Roadmap
+
+| Phase | Scope | Gate |
+| --- | --- | --- |
+| 1 | Core, lecture/writing agents, SQLite memory, review UI | Unit tests + manual approval workflow |
+| 2 | Research/assessment, verified source connectors, Redis and retrieval | Connector contract tests + evidence audit |
+| 3 | Content/social/portfolio integrations | Per-integration permission and dry-run tests |
+| 4 | Evaluation, enterprise security, cloud operations | Threat model, backup/restore and acceptance tests |
+
+## Safety principles
+
+- Human approval precedes any external action.
+- Student identifiers and grades are not persistent memory.
+- A source is never labelled verified without a recorded verification result.
+- PKB changes are proposals until approved by the owner.
+- Secrets remain in the deployment environment, never in Git.
+
