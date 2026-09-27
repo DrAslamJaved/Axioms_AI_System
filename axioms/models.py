@@ -13,6 +13,7 @@ class AgentName(StrEnum):
     WRITING = "writing_communication"
     SOCIAL_MEDIA = "social_media"
     PORTFOLIO = "stem_ai_portfolio"
+    AUTOEVAL = "autoeval"
 
 
 class TaskStatus(StrEnum):

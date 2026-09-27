@@ -24,6 +24,15 @@ PORTFOLIO_KEYWORDS = {
     "reproduce",
     "case study",
 }
+AUTOEVAL_KEYWORDS = {
+    "evaluate",
+    "evaluation",
+    "quality check",
+    "quality assurance",
+    "qa",
+    "regression",
+    "audit output",
+}
 
 
 def build_task_graph(request: TaskRequest) -> list[Subtask]:
@@ -65,6 +74,17 @@ def build_task_graph(request: TaskRequest) -> list[Subtask]:
                 instructions=(
                     "Create an evidence-bound repository, README, and reproducibility plan "
                     "without creating, modifying, or publishing any external repository."
+                ),
+            )
+        )
+    if any(keyword in text for keyword in AUTOEVAL_KEYWORDS):
+        subtasks.append(
+            Subtask(
+                agent=AgentName.AUTOEVAL,
+                title="Prepare AutoEval review report",
+                instructions=(
+                    "Run declared deterministic checks and report review findings without approving, "
+                    "reconfiguring, publishing, or changing any external system."
                 ),
             )
         )

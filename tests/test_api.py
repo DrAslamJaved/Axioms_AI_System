@@ -2,6 +2,7 @@ from pathlib import Path
 
 from axioms.api import (
     AssessmentBlueprintIn,
+    AutoEvalReportIn,
     ContentPackageIn,
     LecturePlanIn,
     PortfolioPackageIn,
@@ -11,6 +12,8 @@ from axioms.api import (
     create_assessment_blueprint,
     create_assessment_instructor_docx,
     create_assessment_student_docx,
+    create_autoeval_report,
+    create_autoeval_report_docx,
     create_content_package,
     create_content_package_docx,
     create_lecture_plan,
@@ -220,4 +223,25 @@ def test_portfolio_handler_returns_review_only_package() -> None:
 def test_portfolio_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     response = create_portfolio_package_docx(portfolio_payload())
+    assert Path(response.path).read_bytes()[:2] == b"PK"
+
+
+def autoeval_payload() -> AutoEvalReportIn:
+    return AutoEvalReportIn(
+        evaluated_agent="lecture_design",
+        deliverable_title="Spectral Graph Theory lecture plan",
+        artifact_text="The plan includes intuition, a formal definition, and a worked example.",
+        required_elements=["intuition", "formal definition", "worked example"],
+    )
+
+
+def test_autoeval_handler_returns_review_signal_without_release_approval() -> None:
+    body = create_autoeval_report(autoeval_payload())
+    assert body["human_review_required"]
+    assert body["automatic_reconfiguration_blocked"]
+
+
+def test_autoeval_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    response = create_autoeval_report_docx(autoeval_payload())
     assert Path(response.path).read_bytes()[:2] == b"PK"

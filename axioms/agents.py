@@ -90,3 +90,23 @@ def portfolio_draft(request: TaskRequest) -> Deliverable:
 - Do not include API keys, student data, proprietary material, or unverified research claims.
 """
     return Deliverable(title=title, agent=AgentName.PORTFOLIO, content=content)
+
+
+def autoeval_draft(request: TaskRequest) -> Deliverable:
+    title = f"AutoEval planning draft: {request.goal}"
+    content = f"""# {title}
+
+## Purpose and audience
+- Audience: {request.audience}
+- Deadline: {request.deadline or 'not supplied'}
+
+## Proposed review sequence
+1. Define required text markers and evidence markers for the target deliverable.
+2. Run deterministic contract checks and record the artifact hash.
+3. Route every warning, missing marker, or sensitive-data declaration to human review.
+
+## Safety boundary
+- Scores are review signals, not proof of factual quality or release readiness.
+- AutoEval cannot approve, publish, schedule, reconfigure other agents, or make external changes.
+"""
+    return Deliverable(title=title, agent=AgentName.AUTOEVAL, content=content)

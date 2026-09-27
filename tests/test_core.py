@@ -39,3 +39,10 @@ def test_portfolio_request_routes_to_review_only_agent(tmp_path: Path) -> None:
     record = core.create_task(TaskRequest(goal="Prepare a GitHub portfolio repository for my AI project"))
     assert [task.agent for task in record.subtasks] == [AgentName.PORTFOLIO]
     assert "does not create" in record.deliverables[0].content
+
+
+def test_autoeval_request_routes_to_non_reconfiguring_agent(tmp_path: Path) -> None:
+    core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    record = core.create_task(TaskRequest(goal="Run a quality assurance evaluation on this artifact"))
+    assert [task.agent for task in record.subtasks] == [AgentName.AUTOEVAL]
+    assert "cannot approve" in record.deliverables[0].content

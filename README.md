@@ -123,6 +123,15 @@ plans containing proprietary, restricted, or unknown-access data. `POST /portfol
 exports the package. It cannot create, modify, push to, or publish a GitHub repository. See
 [docs/portfolio_agent.md](docs/portfolio_agent.md) for the full contract.
 
+## AutoEval Agent
+
+`POST /autoeval-reports` generates a deterministic review report for a declared artifact. It checks
+required text markers, evidence-marker presence, declared sensitive-data status, public-delivery
+gates, and records a SHA-256 audit hash. The resulting percentage is a review signal only: it does
+not establish factual accuracy or approve release. `POST /autoeval-reports/docx` exports the report.
+AutoEval cannot reconfigure agents, publish, schedule, or make external changes. See
+[docs/autoeval_agent.md](docs/autoeval_agent.md) for its exact scope.
+
 ## Deployment
 
 Local Docker deployment and the GitHub release checklist are in
