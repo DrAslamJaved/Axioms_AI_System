@@ -32,3 +32,10 @@ def test_social_media_request_routes_to_review_only_agent(tmp_path: Path) -> Non
     record = core.create_task(TaskRequest(goal="Prepare a LinkedIn post about graph theory"))
     assert [task.agent for task in record.subtasks] == [AgentName.SOCIAL_MEDIA]
     assert "does not connect" in record.deliverables[0].content
+
+
+def test_portfolio_request_routes_to_review_only_agent(tmp_path: Path) -> None:
+    core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    record = core.create_task(TaskRequest(goal="Prepare a GitHub portfolio repository for my AI project"))
+    assert [task.agent for task in record.subtasks] == [AgentName.PORTFOLIO]
+    assert "does not create" in record.deliverables[0].content

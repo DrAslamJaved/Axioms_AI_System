@@ -15,6 +15,15 @@ SOCIAL_MEDIA_KEYWORDS = {
     "post",
     "carousel",
 }
+PORTFOLIO_KEYWORDS = {
+    "portfolio",
+    "github",
+    "repository",
+    "repo",
+    "reproducibility",
+    "reproduce",
+    "case study",
+}
 
 
 def build_task_graph(request: TaskRequest) -> list[Subtask]:
@@ -45,6 +54,17 @@ def build_task_graph(request: TaskRequest) -> list[Subtask]:
                 instructions=(
                     "Create platform-native drafts, accessibility notes, a proposed calendar, "
                     "and approval checks without scheduling or publishing."
+                ),
+            )
+        )
+    if any(keyword in text for keyword in PORTFOLIO_KEYWORDS):
+        subtasks.append(
+            Subtask(
+                agent=AgentName.PORTFOLIO,
+                title="Prepare STEM AI portfolio blueprint",
+                instructions=(
+                    "Create an evidence-bound repository, README, and reproducibility plan "
+                    "without creating, modifying, or publishing any external repository."
                 ),
             )
         )

@@ -12,6 +12,7 @@ class AgentName(StrEnum):
     LECTURE = "lecture_design"
     WRITING = "writing_communication"
     SOCIAL_MEDIA = "social_media"
+    PORTFOLIO = "stem_ai_portfolio"
 
 
 class TaskStatus(StrEnum):

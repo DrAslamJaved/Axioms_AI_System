@@ -69,3 +69,24 @@ def social_media_draft(request: TaskRequest) -> Deliverable:
 - Do not use mass messages, scraping, engagement bait, or unapproved automation.
 """
     return Deliverable(title=title, agent=AgentName.SOCIAL_MEDIA, content=content)
+
+
+def portfolio_draft(request: TaskRequest) -> Deliverable:
+    title = f"STEM AI portfolio planning draft: {request.goal}"
+    content = f"""# {title}
+
+## Purpose and audience
+- Audience: {request.audience}
+- Deadline: {request.deadline or 'not supplied'}
+
+## Proposed review sequence
+1. Record author-verified research claims and their source references.
+2. Check data access, licence, attribution, and public-release eligibility.
+3. Prepare a repository structure, README plan, reproduction steps, and test plan.
+4. Obtain explicit approval before any repository creation, push, or visibility change.
+
+## Safety boundary
+- This draft does not create, modify, push to, or publish any GitHub repository.
+- Do not include API keys, student data, proprietary material, or unverified research claims.
+"""
+    return Deliverable(title=title, agent=AgentName.PORTFOLIO, content=content)
