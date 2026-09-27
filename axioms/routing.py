@@ -4,6 +4,17 @@ from axioms.models import AgentName, Subtask, TaskRequest
 
 LECTURE_KEYWORDS = {"lecture", "lesson", "course", "slides", "quiz", "assessment", "teach"}
 WRITING_KEYWORDS = {"write", "email", "report", "paper", "letter", "proposal", "draft"}
+SOCIAL_MEDIA_KEYWORDS = {
+    "social media",
+    "linkedin",
+    "instagram",
+    "tiktok",
+    "whatsapp",
+    "twitter",
+    "x thread",
+    "post",
+    "carousel",
+}
 
 
 def build_task_graph(request: TaskRequest) -> list[Subtask]:
@@ -26,6 +37,17 @@ def build_task_graph(request: TaskRequest) -> list[Subtask]:
                 instructions="Create a structured draft with assumptions and items needing factual verification.",
             )
         )
+    if any(keyword in text for keyword in SOCIAL_MEDIA_KEYWORDS):
+        subtasks.append(
+            Subtask(
+                agent=AgentName.SOCIAL_MEDIA,
+                title="Prepare social-media draft package",
+                instructions=(
+                    "Create platform-native drafts, accessibility notes, a proposed calendar, "
+                    "and approval checks without scheduling or publishing."
+                ),
+            )
+        )
     if not subtasks:
         subtasks.append(
             Subtask(
@@ -35,4 +57,3 @@ def build_task_graph(request: TaskRequest) -> list[Subtask]:
             )
         )
     return subtasks
-

@@ -11,6 +11,7 @@ class AgentName(StrEnum):
     CORE = "axioms_core"
     LECTURE = "lecture_design"
     WRITING = "writing_communication"
+    SOCIAL_MEDIA = "social_media"
 
 
 class TaskStatus(StrEnum):
@@ -63,4 +64,3 @@ class TaskRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-

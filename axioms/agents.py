@@ -49,3 +49,23 @@ def writing_draft(request: TaskRequest) -> Deliverable:
 """
     return Deliverable(title=title, agent=AgentName.WRITING, content=content)
 
+
+def social_media_draft(request: TaskRequest) -> Deliverable:
+    title = f"Social-media planning draft: {request.goal}"
+    content = f"""# {title}
+
+## Purpose and audience
+- Audience: {request.audience}
+- Deadline: {request.deadline or 'not supplied'}
+
+## Proposed review sequence
+1. Confirm platform, approved sources, verified facts, and recipient consent where relevant.
+2. Prepare platform-native draft copy and accessibility notes.
+3. Check the 48-hour same-topic cooldown for each platform.
+4. Obtain explicit author approval before any scheduling, upload, sharing, or publication.
+
+## Safety boundary
+- This draft does not connect to, schedule, or post through any social account.
+- Do not use mass messages, scraping, engagement bait, or unapproved automation.
+"""
+    return Deliverable(title=title, agent=AgentName.SOCIAL_MEDIA, content=content)

@@ -29,6 +29,14 @@ from axioms.research_agent import (
     build_research_brief,
 )
 from axioms.research_agent import export_docx as export_research_docx
+from axioms.social_media_agent import (
+    RecentSocialPost,
+    SocialMediaRequest,
+    SocialObjective,
+    SocialPlatform,
+    build_social_media_package,
+)
+from axioms.social_media_agent import export_docx as export_social_media_docx
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
@@ -171,6 +179,37 @@ class ContentPackageIn(BaseModel):
         data["learning_outcomes"] = tuple(self.learning_outcomes)
         data["keywords"] = tuple(self.keywords)
         return ContentRequest(**data)
+
+
+class RecentSocialPostIn(BaseModel):
+    platform: SocialPlatform
+    topic: str = Field(min_length=2, max_length=300)
+    hours_since_publication: int = Field(ge=0, le=8760)
+
+    def to_agent_request(self) -> RecentSocialPost:
+        return RecentSocialPost(**self.model_dump())
+
+
+class SocialMediaPackageIn(BaseModel):
+    topic: str = Field(min_length=2, max_length=300)
+    audience: str = Field(min_length=2, max_length=300)
+    platforms: list[SocialPlatform] = Field(min_length=1, max_length=5)
+    objective: SocialObjective = SocialObjective.EDUCATE
+    approved_source_scope: str = Field(min_length=5, max_length=4000)
+    verified_facts: list[str] = Field(min_length=1, max_length=8)
+    brand_voice: str = Field(default="clear, respectful, and evidence-aware", max_length=300)
+    call_to_action: str | None = Field(default=None, max_length=500)
+    calendar_weeks: int = Field(default=4, ge=1, le=4)
+    recent_posts: list[RecentSocialPostIn] = Field(default_factory=list, max_length=100)
+
+    def to_agent_request(self) -> SocialMediaRequest:
+        data = self.model_dump(exclude={"platforms", "verified_facts", "recent_posts"})
+        return SocialMediaRequest(
+            **data,
+            platforms=tuple(self.platforms),
+            verified_facts=tuple(self.verified_facts),
+            recent_posts=tuple(item.to_agent_request() for item in self.recent_posts),
+        )
 
 
 @app.get("/health")
@@ -318,6 +357,29 @@ def create_content_package_docx(payload: ContentPackageIn) -> FileResponse:
     return FileResponse(
         destination,
         filename="content_package.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.post("/social-media-packages")
+def create_social_media_package(payload: SocialMediaPackageIn) -> dict:
+    try:
+        return build_social_media_package(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/social-media-packages/docx")
+def create_social_media_package_docx(payload: SocialMediaPackageIn) -> FileResponse:
+    try:
+        package = build_social_media_package(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    destination = Path("artifacts") / "social_media_package.docx"
+    export_social_media_docx(package, destination)
+    return FileResponse(
+        destination,
+        filename="social_media_package.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 

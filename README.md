@@ -105,6 +105,15 @@ markers, accessibility checks, and accuracy controls. `POST /content-packages/do
 the package as a DOCX. Public publication remains blocked pending author approval. See
 [docs/content_agent.md](docs/content_agent.md) for the full contract.
 
+## Social Media Agent
+
+`POST /social-media-packages` creates platform-native draft packs for LinkedIn, Instagram,
+X, TikTok, and WhatsApp, together with accessibility notes and a proposed review calendar.
+It requires author-supplied verified facts and checks a 48-hour same-topic cooldown for each
+platform. `POST /social-media-packages/docx` exports the review package. It has no account
+connection, scheduling, messaging, scraping, or publishing capability. See
+[docs/social_media_agent.md](docs/social_media_agent.md) for the governance contract.
+
 ## Deployment
 
 Local Docker deployment and the GitHub release checklist are in

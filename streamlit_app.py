@@ -271,6 +271,67 @@ if content:
     for item in content["accessibility_checks"]:
         st.checkbox(item, key=f"access_{item}")
 
+with st.expander("Create a reviewed social-media package", expanded=True):
+    with st.form("social-media-package"):
+        social_topic = st.text_input("Social-media topic", value="Spectral Graph Theory")
+        social_audience = st.text_input("Social-media audience", value="Graduate mathematics students")
+        social_platforms = st.multiselect(
+            "Platforms",
+            ["linkedin", "instagram", "x", "tiktok", "whatsapp"],
+            default=["linkedin", "instagram"],
+        )
+        social_objective = st.selectbox("Objective", ["educate", "announce", "invite_discussion"])
+        social_sources = st.text_area(
+            "Approved source scope for social drafts",
+            value="Instructor-approved lecture notes on spectral graph theory.",
+        )
+        social_facts = st.text_area(
+            "Verified facts (one per line)",
+            value="The material is based on instructor-approved lecture notes.",
+        )
+        social_weeks = st.slider("Proposed calendar length (weeks)", 1, 4, 4)
+        social_submitted = st.form_submit_button("Build reviewed social-media package")
+
+    if social_submitted:
+        payload = {
+            "topic": social_topic,
+            "audience": social_audience,
+            "platforms": social_platforms,
+            "objective": social_objective,
+            "approved_source_scope": social_sources,
+            "verified_facts": [item.strip() for item in social_facts.splitlines() if item.strip()],
+            "calendar_weeks": social_weeks,
+        }
+        response = requests.post(f"{API_URL}/social-media-packages", json=payload, timeout=20)
+        response.raise_for_status()
+        st.session_state["social_media_package"] = response.json()
+
+social = st.session_state.get("social_media_package")
+if social:
+    st.subheader(f"Social-media package: {social['request']['topic']}")
+    st.caption("Draft only. This app cannot schedule or publish to any social account.")
+    for item in social["platform_drafts"]:
+        st.markdown(f"**{item['platform'].title()} — {item['format']}**")
+        st.write(item["headline"])
+        st.code(item["draft_copy"], language=None)
+    st.markdown("**Proposed calendar**")
+    st.dataframe(
+        [
+            {
+                "Week": item["week"],
+                "Platform": item["platform"],
+                "Purpose": item["purpose"],
+                "Status": item["status"],
+            }
+            for item in social["proposed_calendar"]
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.markdown("**Publication checks**")
+    for item in social["publication_checks"]:
+        st.checkbox(item, key=f"social_{item}")
+
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")
     audience = st.text_input("Audience", value="unspecified")

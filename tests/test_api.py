@@ -5,6 +5,7 @@ from axioms.api import (
     ContentPackageIn,
     LecturePlanIn,
     ResearchBriefIn,
+    SocialMediaPackageIn,
     WritingDraftIn,
     create_assessment_blueprint,
     create_assessment_instructor_docx,
@@ -16,6 +17,8 @@ from axioms.api import (
     create_research_bibtex,
     create_research_brief,
     create_research_brief_docx,
+    create_social_media_package,
+    create_social_media_package_docx,
     create_writing_draft,
     create_writing_draft_docx,
 )
@@ -161,4 +164,28 @@ def test_content_handler_returns_a_review_first_package() -> None:
 def test_content_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     response = create_content_package_docx(content_payload())
+    assert Path(response.path).read_bytes()[:2] == b"PK"
+
+
+def social_media_payload() -> SocialMediaPackageIn:
+    return SocialMediaPackageIn(
+        topic="Spectral Graph Theory",
+        audience="Graduate mathematics students",
+        platforms=["linkedin", "instagram"],
+        objective="educate",
+        approved_source_scope="Instructor-approved spectral graph theory notes.",
+        verified_facts=["The draft is based on instructor-approved lecture notes."],
+    )
+
+
+def test_social_media_handler_returns_drafts_without_external_action() -> None:
+    body = create_social_media_package(social_media_payload())
+    assert body["approval_required"]
+    assert body["external_action_blocked"]
+    assert len(body["platform_drafts"]) == 2
+
+
+def test_social_media_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    response = create_social_media_package_docx(social_media_payload())
     assert Path(response.path).read_bytes()[:2] == b"PK"

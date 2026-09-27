@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from axioms.agents import lecture_draft, writing_draft
+from axioms.agents import lecture_draft, social_media_draft, writing_draft
 from axioms.models import AgentName, ApprovalDecision, TaskRecord, TaskRequest, TaskStatus
 from axioms.policy import assess_request
 from axioms.routing import build_task_graph
@@ -20,6 +20,8 @@ class AxiomsCore:
                 record.deliverables.append(lecture_draft(request))
             elif subtask.agent is AgentName.WRITING:
                 record.deliverables.append(writing_draft(request))
+            elif subtask.agent is AgentName.SOCIAL_MEDIA:
+                record.deliverables.append(social_media_draft(request))
         policy = assess_request(request)
         record.status = TaskStatus.PENDING_APPROVAL if policy.requires_approval else TaskStatus.PLANNED
         self.store.save(record)
@@ -55,4 +57,3 @@ def _record_from_payload(payload: dict) -> TaskRecord:
         for item in payload["deliverables"]
     ]
     return record
-
