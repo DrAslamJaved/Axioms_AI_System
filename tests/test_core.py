@@ -26,3 +26,9 @@ def test_mixed_goal_creates_parallel_specialist_subtasks(tmp_path: Path) -> None
     record = core.create_task(TaskRequest(goal="Prepare a lecture and write an announcement"))
     assert {task.agent for task in record.subtasks} == {AgentName.LECTURE, AgentName.WRITING}
 
+
+def test_social_media_request_routes_to_review_only_agent(tmp_path: Path) -> None:
+    core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    record = core.create_task(TaskRequest(goal="Prepare a LinkedIn post about graph theory"))
+    assert [task.agent for task in record.subtasks] == [AgentName.SOCIAL_MEDIA]
+    assert "does not connect" in record.deliverables[0].content
