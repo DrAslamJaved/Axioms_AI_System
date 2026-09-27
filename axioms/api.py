@@ -16,6 +16,8 @@ from axioms.assessment_agent import (
     export_instructor_docx,
     export_student_docx,
 )
+from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, build_content_package
+from axioms.content_agent import export_docx as export_content_docx
 from axioms.core import AxiomsCore
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.models import ApprovalDecision, TaskRequest
@@ -153,6 +155,24 @@ class AssessmentBlueprintIn(BaseModel):
         )
 
 
+class ContentPackageIn(BaseModel):
+    topic: str = Field(min_length=2, max_length=300)
+    format: ContentFormat
+    audience: str = Field(min_length=2, max_length=300)
+    duration_minutes: int = Field(ge=3, le=240)
+    approved_source_scope: str = Field(min_length=5, max_length=4000)
+    learning_outcomes: list[str] = Field(min_length=1, max_length=6)
+    language_mode: LanguageMode = LanguageMode.ENGLISH
+    application_context: str | None = Field(default=None, max_length=1000)
+    keywords: list[str] = Field(default_factory=list, max_length=8)
+
+    def to_agent_request(self) -> ContentRequest:
+        data = self.model_dump()
+        data["learning_outcomes"] = tuple(self.learning_outcomes)
+        data["keywords"] = tuple(self.keywords)
+        return ContentRequest(**data)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "human-governed-mvp"}
@@ -275,6 +295,29 @@ def create_assessment_instructor_docx(payload: AssessmentBlueprintIn) -> FileRes
     return FileResponse(
         destination,
         filename="instructor_assessment_blueprint.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.post("/content-packages")
+def create_content_package(payload: ContentPackageIn) -> dict:
+    try:
+        return build_content_package(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/content-packages/docx")
+def create_content_package_docx(payload: ContentPackageIn) -> FileResponse:
+    try:
+        package = build_content_package(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    destination = Path("artifacts") / "content_package.docx"
+    export_content_docx(package, destination)
+    return FileResponse(
+        destination,
+        filename="content_package.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 

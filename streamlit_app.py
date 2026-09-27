@@ -224,6 +224,53 @@ if assessment:
     for item in assessment["ai_resilience_review"]:
         st.write(f"- {item}")
 
+with st.expander("Create an educational content package", expanded=True):
+    with st.form("content-package"):
+        content_topic = st.text_input("Content topic", value="Spectral Graph Theory")
+        content_format = st.selectbox("Content format", ["youtube_video", "course_module", "workshop"])
+        content_audience = st.text_input("Content audience", value="Graduate mathematics students")
+        content_duration = st.slider("Content duration (minutes)", 3, 240, 15, step=1)
+        source_scope = st.text_area(
+            "Approved source scope for content",
+            value="Instructor-approved lecture notes on spectral graph theory.",
+        )
+        content_outcomes = st.text_area(
+            "Content learning outcomes (one per line)",
+            value="Explain the intuition behind spectral graph methods.\nInterpret a small worked example.",
+        )
+        language_mode = st.selectbox("Language mode", ["english", "urdu", "bilingual"])
+        content_submitted = st.form_submit_button("Build reviewed content package")
+
+    if content_submitted:
+        payload = {
+            "topic": content_topic,
+            "format": content_format,
+            "audience": content_audience,
+            "duration_minutes": content_duration,
+            "approved_source_scope": source_scope,
+            "learning_outcomes": [item.strip() for item in content_outcomes.splitlines() if item.strip()],
+            "language_mode": language_mode,
+        }
+        response = requests.post(f"{API_URL}/content-packages", json=payload, timeout=20)
+        response.raise_for_status()
+        st.session_state["content_package"] = response.json()
+
+content = st.session_state.get("content_package")
+if content:
+    st.subheader(f"Content package: {content['request']['topic']}")
+    st.caption("Public publication remains blocked pending author review.")
+    st.markdown("**Title options**")
+    for title in content["title_options"]:
+        st.write(f"- {title}")
+    st.dataframe(
+        [{"Minutes": item["minutes"], "Segment": item["title"], "Purpose": item["purpose"]} for item in content["segments"]],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.markdown("**Accessibility checks**")
+    for item in content["accessibility_checks"]:
+        st.checkbox(item, key=f"access_{item}")
+
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")
     audience = st.text_input("Audience", value="unspecified")

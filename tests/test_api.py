@@ -2,12 +2,15 @@ from pathlib import Path
 
 from axioms.api import (
     AssessmentBlueprintIn,
+    ContentPackageIn,
     LecturePlanIn,
     ResearchBriefIn,
     WritingDraftIn,
     create_assessment_blueprint,
     create_assessment_instructor_docx,
     create_assessment_student_docx,
+    create_content_package,
+    create_content_package_docx,
     create_lecture_plan,
     create_lecture_plan_docx,
     create_research_bibtex,
@@ -135,3 +138,27 @@ def test_assessment_export_handlers_separate_student_and_instructor_docs(tmp_pat
     instructor = create_assessment_instructor_docx(assessment_payload())
     assert Path(student.path).read_bytes()[:2] == b"PK"
     assert Path(instructor.path).read_bytes()[:2] == b"PK"
+
+
+def content_payload() -> ContentPackageIn:
+    return ContentPackageIn(
+        topic="Spectral Graph Theory",
+        format="youtube_video",
+        audience="Graduate mathematics students",
+        duration_minutes=15,
+        approved_source_scope="Instructor-approved spectral graph theory notes.",
+        learning_outcomes=["Explain intuition.", "Interpret a worked example."],
+        language_mode="bilingual",
+    )
+
+
+def test_content_handler_returns_a_review_first_package() -> None:
+    body = create_content_package(content_payload())
+    assert body["publication_approval_required"]
+    assert sum(item["minutes"] for item in body["segments"]) == 15
+
+
+def test_content_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    response = create_content_package_docx(content_payload())
+    assert Path(response.path).read_bytes()[:2] == b"PK"

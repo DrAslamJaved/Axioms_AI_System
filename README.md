@@ -97,6 +97,14 @@ and qualitative AI-resilience review. Separate DOCX endpoints produce student-fa
 instructor-facing materials, preventing rubrics and solution guides from reaching students.
 See [docs/assessment_agent.md](docs/assessment_agent.md) for the full governance contract.
 
+## Content Creation Agent
+
+`POST /content-packages` produces reviewable educational-video, course-module, or workshop
+plans with title options, timed segments, description framework, thumbnail brief, bilingual
+markers, accessibility checks, and accuracy controls. `POST /content-packages/docx` exports
+the package as a DOCX. Public publication remains blocked pending author approval. See
+[docs/content_agent.md](docs/content_agent.md) for the full contract.
+
 ## Deployment
 
 Local Docker deployment and the GitHub release checklist are in
