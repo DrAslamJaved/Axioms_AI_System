@@ -332,6 +332,63 @@ if social:
     for item in social["publication_checks"]:
         st.checkbox(item, key=f"social_{item}")
 
+with st.expander("Create a STEM AI portfolio package", expanded=True):
+    with st.form("portfolio-package"):
+        portfolio_title = st.text_input(
+            "Portfolio project title", value="Agentic Spectral Graph Theory Learning Toolkit"
+        )
+        portfolio_summary = st.text_area(
+            "Research summary",
+            value="A reproducible educational toolkit that demonstrates spectral graph theory concepts.",
+        )
+        portfolio_audience = st.selectbox(
+            "Portfolio audience", ["academic", "industry", "academic_and_industry"]
+        )
+        portfolio_visibility = st.selectbox("Proposed repository visibility", ["private", "public"])
+        portfolio_evidence = st.text_area(
+            "Verified evidence (one claim | source reference per line)",
+            value="The project uses instructor-approved lecture notes. | Internal course-material review record",
+        )
+        portfolio_submitted = st.form_submit_button("Build reviewed portfolio package")
+
+    if portfolio_submitted:
+        evidence_items = []
+        for index, line in enumerate(portfolio_evidence.splitlines(), start=1):
+            claim, separator, source = line.partition("|")
+            if claim.strip() and separator and source.strip():
+                evidence_items.append(
+                    {
+                        "evidence_id": f"E{index:02d}",
+                        "claim": claim.strip(),
+                        "source_reference": source.strip(),
+                        "verified": True,
+                    }
+                )
+        payload = {
+            "project_title": portfolio_title,
+            "research_summary": portfolio_summary,
+            "target_audience": portfolio_audience,
+            "repository_visibility": portfolio_visibility,
+            "verified_evidence": evidence_items,
+        }
+        response = requests.post(f"{API_URL}/portfolio-packages", json=payload, timeout=20)
+        response.raise_for_status()
+        st.session_state["portfolio_package"] = response.json()
+
+portfolio = st.session_state.get("portfolio_package")
+if portfolio:
+    st.subheader(f"Portfolio package: {portfolio['request']['project_title']}")
+    st.caption("Review only. This app cannot create, change, push to, or publish a GitHub repository.")
+    st.markdown("**Repository structure**")
+    st.dataframe(
+        [{"Path": item["path"], "Purpose": item["purpose"]} for item in portfolio["repository_structure"]],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.markdown("**Reproducibility checklist**")
+    for item in portfolio["reproducibility_checklist"]:
+        st.checkbox(item, key=f"portfolio_{item}")
+
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")
     audience = st.text_input("Audience", value="unspecified")

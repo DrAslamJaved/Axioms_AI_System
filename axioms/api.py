@@ -21,6 +21,16 @@ from axioms.content_agent import export_docx as export_content_docx
 from axioms.core import AxiomsCore
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.models import ApprovalDecision, TaskRequest
+from axioms.portfolio_agent import (
+    DataAccessLevel,
+    DatasetAsset,
+    PortfolioAudience,
+    PortfolioEvidence,
+    PortfolioRequest,
+    RepositoryVisibility,
+    build_portfolio_package,
+)
+from axioms.portfolio_agent import export_docx as export_portfolio_docx
 from axioms.research_agent import (
     EvidenceSource,
     PublicationKind,
@@ -212,6 +222,45 @@ class SocialMediaPackageIn(BaseModel):
         )
 
 
+class PortfolioEvidenceIn(BaseModel):
+    evidence_id: str = Field(min_length=1, max_length=50)
+    claim: str = Field(min_length=5, max_length=2000)
+    source_reference: str = Field(min_length=3, max_length=2000)
+    verified: bool
+
+    def to_agent_request(self) -> PortfolioEvidence:
+        return PortfolioEvidence(**self.model_dump())
+
+
+class DatasetAssetIn(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    access_level: DataAccessLevel
+    licence_or_permission: str | None = Field(default=None, max_length=1000)
+    attribution: str | None = Field(default=None, max_length=1000)
+
+    def to_agent_request(self) -> DatasetAsset:
+        return DatasetAsset(**self.model_dump())
+
+
+class PortfolioPackageIn(BaseModel):
+    project_title: str = Field(min_length=2, max_length=300)
+    research_summary: str = Field(min_length=10, max_length=4000)
+    target_audience: PortfolioAudience
+    repository_visibility: RepositoryVisibility
+    verified_evidence: list[PortfolioEvidenceIn] = Field(min_length=1, max_length=12)
+    dataset_assets: list[DatasetAssetIn] = Field(default_factory=list, max_length=30)
+    include_demo_plan: bool = True
+    include_notebook_plan: bool = True
+
+    def to_agent_request(self) -> PortfolioRequest:
+        data = self.model_dump(exclude={"verified_evidence", "dataset_assets"})
+        return PortfolioRequest(
+            **data,
+            verified_evidence=tuple(item.to_agent_request() for item in self.verified_evidence),
+            dataset_assets=tuple(item.to_agent_request() for item in self.dataset_assets),
+        )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "human-governed-mvp"}
@@ -380,6 +429,29 @@ def create_social_media_package_docx(payload: SocialMediaPackageIn) -> FileRespo
     return FileResponse(
         destination,
         filename="social_media_package.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.post("/portfolio-packages")
+def create_portfolio_package(payload: PortfolioPackageIn) -> dict:
+    try:
+        return build_portfolio_package(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/portfolio-packages/docx")
+def create_portfolio_package_docx(payload: PortfolioPackageIn) -> FileResponse:
+    try:
+        package = build_portfolio_package(payload.to_agent_request())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    destination = Path("artifacts") / "portfolio_package.docx"
+    export_portfolio_docx(package, destination)
+    return FileResponse(
+        destination,
+        filename="portfolio_package.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 

@@ -114,6 +114,15 @@ platform. `POST /social-media-packages/docx` exports the review package. It has 
 connection, scheduling, messaging, scraping, or publishing capability. See
 [docs/social_media_agent.md](docs/social_media_agent.md) for the governance contract.
 
+## STEM AI Portfolio Agent
+
+`POST /portfolio-packages` creates an evidence-bound plan for a research portfolio case study:
+repository structure, README sections, reproducibility checklist, data-provenance checks, and a
+constrained impact summary. It accepts only author-verified claims and rejects public-repository
+plans containing proprietary, restricted, or unknown-access data. `POST /portfolio-packages/docx`
+exports the package. It cannot create, modify, push to, or publish a GitHub repository. See
+[docs/portfolio_agent.md](docs/portfolio_agent.md) for the full contract.
+
 ## Deployment
 
 Local Docker deployment and the GitHub release checklist are in

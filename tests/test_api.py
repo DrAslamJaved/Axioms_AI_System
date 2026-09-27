@@ -4,6 +4,7 @@ from axioms.api import (
     AssessmentBlueprintIn,
     ContentPackageIn,
     LecturePlanIn,
+    PortfolioPackageIn,
     ResearchBriefIn,
     SocialMediaPackageIn,
     WritingDraftIn,
@@ -14,6 +15,8 @@ from axioms.api import (
     create_content_package_docx,
     create_lecture_plan,
     create_lecture_plan_docx,
+    create_portfolio_package,
+    create_portfolio_package_docx,
     create_research_bibtex,
     create_research_brief,
     create_research_brief_docx,
@@ -188,4 +191,33 @@ def test_social_media_handler_returns_drafts_without_external_action() -> None:
 def test_social_media_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     response = create_social_media_package_docx(social_media_payload())
+    assert Path(response.path).read_bytes()[:2] == b"PK"
+
+
+def portfolio_payload() -> PortfolioPackageIn:
+    return PortfolioPackageIn(
+        project_title="Agentic Spectral Graph Theory Learning Toolkit",
+        research_summary="A reproducible educational project for spectral graph theory.",
+        target_audience="academic_and_industry",
+        repository_visibility="public",
+        verified_evidence=[
+            {
+                "evidence_id": "E01",
+                "claim": "The project is based on instructor-approved lecture notes.",
+                "source_reference": "Internal course-material review record",
+                "verified": True,
+            }
+        ],
+    )
+
+
+def test_portfolio_handler_returns_review_only_package() -> None:
+    body = create_portfolio_package(portfolio_payload())
+    assert body["approval_required"]
+    assert body["github_action_blocked"]
+
+
+def test_portfolio_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    response = create_portfolio_package_docx(portfolio_payload())
     assert Path(response.path).read_bytes()[:2] == b"PK"
