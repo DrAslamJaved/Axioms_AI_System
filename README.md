@@ -156,6 +156,10 @@ Local Docker deployment and the GitHub release checklist are in
 [docs/deployment.md](docs/deployment.md). Start with local Docker Compose; do not deploy
 with real keys or enable external integrations until the security checklist is complete.
 
+Before local container startup, run `python scripts/verify_release.py --root .`. The verifier is
+structural and offline: it confirms the release files, health-gated Compose dependency, persistent
+SQLite volume, conservative disabled-LLM default, and project-specific deployment documentation.
+
 ## Roadmap
 
 | Phase | Scope | Gate |

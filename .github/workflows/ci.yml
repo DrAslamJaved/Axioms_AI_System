@@ -21,4 +21,4 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: pytest
-
+      - run: python scripts/verify_release.py --root .

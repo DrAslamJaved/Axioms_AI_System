@@ -2,32 +2,33 @@
 
 ## 1. Local validation
 
-```bash
-copy .env.example .env  # Windows PowerShell/cmd
-# or: cp .env.example .env
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1  # Windows PowerShell
-pip install -e ".[dev]"
-pytest
-ruff check .
-docker compose up --build
+```powershell
+Copy-Item .env.example .env
+python -m pip install -e ".[dev]"
+python scripts/verify_release.py --root .
+python -m pytest
+python -m ruff check .
+docker compose up --build -d
+docker compose ps
+.\scripts\smoke_test_windows.ps1
 ```
 
 Visit `http://localhost:8000/docs` for API documentation and `http://localhost:8501` for
-the review UI. The local SQLite volume persists tasks between containers.
+the review UI. The API container must first become healthy; the UI then starts. The local SQLite
+volume persists tasks between containers. Stop the local stack with `docker compose down`.
 
 ## 2. GitHub release workflow
 
 The target repository recorded for this project is
-`https://github.com/DrAslamJaved/Axioms_IRFS17.git`. Because it is private, deployment
+`https://github.com/DrAslamJaved/Axioms_AI_System.git`. Because it is private, deployment
 must be completed from a machine authenticated to your GitHub account.
 
 ```powershell
-$Repo = 'G:\Research\STEM\Axioms_IFRS17'
+$Repo = 'G:\Research\STEM\Axioms_AI_System'
 Set-Location $Repo
 git init
 git branch -M main
-git remote add origin https://github.com/DrAslamJaved/Axioms_IRFS17.git
+git remote add origin https://github.com/DrAslamJaved/Axioms_AI_System.git
 git add .
 git commit -m "feat: add human-governed Axioms foundation MVP"
 git push -u origin main
@@ -46,4 +47,5 @@ request. Do not force-push or overwrite existing work.
 - Put the service behind TLS and authenticated access.
 - Complete a data-retention policy before uploading lecture, paper, or student materials.
 - Exercise backup/restore and approval-gate tests before inviting other users.
-
+- Do not expose the Streamlit or FastAPI ports publicly until authenticated access, TLS, and a
+  security/privacy review are implemented.
