@@ -15,6 +15,10 @@ from axioms.routing import build_task_graph
 from axioms.store import TaskStore
 
 
+class BlockedApprovalError(RuntimeError):
+    """Raised when a HIGH-risk blocking task is approved without an explicit override."""
+
+
 class AxiomsCore:
     """Small, auditable orchestrator. Tool use and LLMs are intentionally not enabled here."""
 
@@ -50,10 +54,22 @@ class AxiomsCore:
         decision: ApprovalDecision,
         note: str | None = None,
         approved_by: str | None = None,
+        *,
+        override_blocking: bool = False,
     ) -> dict:
         payload = self.store.get(task_id)
         if payload is None:
             raise KeyError(task_id)
+        if (
+            decision is ApprovalDecision.APPROVE
+            and payload.get("risk_tier") == RiskTier.HIGH.value
+            and not override_blocking
+        ):
+            raise BlockedApprovalError(
+                f"Task {task_id} is classified HIGH risk (blocking). "
+                "The data-governance issue must be resolved before approval. "
+                "Pass override_blocking=true to approve with an explicit acknowledgement."
+            )
         status = TaskStatus.APPROVED if decision is ApprovalDecision.APPROVE else TaskStatus.REJECTED
         payload["status"] = status.value
         payload["approval_note"] = note
