@@ -234,7 +234,7 @@ def _run_synthesis(
             )
         )
         return None
-    except Exception as error:  # configuration/runtime provider errors degrade, never crash
+    except Exception as error:  # noqa: BLE001 - provider failures are captured in the agent trace
         trace.append(
             AgentStep(
                 StepKind.NOTE,

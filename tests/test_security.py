@@ -1,7 +1,7 @@
 import pytest
+from fastapi import HTTPException
 
 from axioms.security import auth_enabled, configured_api_key, require_api_key
-from fastapi import HTTPException
 
 
 def test_auth_is_open_when_no_key_configured(monkeypatch) -> None:

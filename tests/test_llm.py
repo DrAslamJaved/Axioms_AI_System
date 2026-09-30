@@ -1,3 +1,5 @@
+import pytest
+
 from axioms.llm import (
     DisabledProvider,
     FakeProvider,
@@ -6,8 +8,6 @@ from axioms.llm import (
     LLMMessage,
     get_provider,
 )
-
-import pytest
 
 
 def test_disabled_provider_refuses_to_generate() -> None:

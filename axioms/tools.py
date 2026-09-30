@@ -54,7 +54,7 @@ def _default_fetch(url: str, *, timeout: float = 15.0, mailto: str | None = None
 
     contact = f"; mailto:{mailto}" if mailto else ""
     request = Request(url, headers={"User-Agent": f"AxiomsAISystem/0.2 (+https://github.com/DrAslamJaved){contact}"})
-    with urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https host
+    with urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 

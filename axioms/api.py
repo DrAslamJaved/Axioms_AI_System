@@ -353,7 +353,7 @@ class ProposalDecisionIn(BaseModel):
 def health() -> dict[str, str]:
     try:
         provider_name = get_provider().name
-    except Exception:
+    except Exception:  # noqa: BLE001 - readiness reports provider configuration without failing
         provider_name = "misconfigured"
     return {
         "status": "ok",
