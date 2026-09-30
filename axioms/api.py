@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -28,6 +31,7 @@ from axioms.content_agent import export_docx as export_content_docx
 from axioms.core import AxiomsCore
 from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
+from axioms.llm import get_provider
 from axioms.models import AgentName, ApprovalDecision, TaskRequest
 from axioms.personal_kb import (
     FeedbackRecord,
@@ -35,6 +39,7 @@ from axioms.personal_kb import (
     PreferenceProposal,
     ProposalDecision,
 )
+from axioms.policy import STRICT_MODE
 from axioms.portfolio_agent import (
     DataAccessLevel,
     DatasetAsset,
@@ -53,6 +58,8 @@ from axioms.research_agent import (
     build_research_brief,
 )
 from axioms.research_agent import export_docx as export_research_docx
+from axioms.research_agent_ai import run_agentic_research_brief
+from axioms.security import auth_enabled, require_api_key
 from axioms.social_media_agent import (
     RecentSocialPost,
     SocialMediaRequest,
@@ -61,11 +68,35 @@ from axioms.social_media_agent import (
     build_social_media_package,
 )
 from axioms.social_media_agent import export_docx as export_social_media_docx
+from axioms.tools import CrossrefClient
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
-app = FastAPI(title="Axioms AI System", version="0.1.0")
+app = FastAPI(title="Axioms AI System", version="0.2.0")
 core = AxiomsCore()
+
+DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _crossref_client() -> CrossrefClient:
+    return CrossrefClient(mailto=os.getenv("CROSSREF_MAILTO") or None)
+
+
+def _docx_response(write: Callable[[Path], None], filename: str, background: BackgroundTasks) -> FileResponse:
+    """Export a DOCX to a unique per-request temp file, then clean it up.
+
+    The MVP wrote every DOCX to a single fixed path (e.g. ``artifacts/lecture_plan.docx``),
+    so two concurrent requests could overwrite each other and one caller could receive
+    another caller's document. Each request now gets its own temp file, removed after the
+    response is sent.
+    """
+
+    handle, tmp = tempfile.mkstemp(prefix="axioms_", suffix=".docx")
+    os.close(handle)
+    path = Path(tmp)
+    write(path)
+    background.add_task(os.remove, tmp)
+    return FileResponse(path, filename=filename, media_type=DOCX_MEDIA)
 
 
 class TaskIn(BaseModel):
@@ -78,6 +109,7 @@ class TaskIn(BaseModel):
 
 class ApprovalIn(BaseModel):
     decision: ApprovalDecision
+    approved_by: str = Field(min_length=2, max_length=200)
     note: str | None = Field(default=None, max_length=2000)
 
 
@@ -319,7 +351,17 @@ class ProposalDecisionIn(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "mode": "human-governed-mvp"}
+    try:
+        provider_name = get_provider().name
+    except Exception:
+        provider_name = "misconfigured"
+    return {
+        "status": "ok",
+        "mode": "human-governed",
+        "auth": "enabled" if auth_enabled() else "open-dev",
+        "llm_provider": provider_name,
+        "approval_mode": os.getenv("AXIOMS_APPROVAL_MODE", STRICT_MODE),
+    }
 
 
 @app.get("/agents")
@@ -333,7 +375,7 @@ def system_readiness() -> dict:
 
 
 @app.post("/feedback")
-def record_feedback(payload: FeedbackIn) -> dict:
+def record_feedback(payload: FeedbackIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return core.kb_store.record_feedback(payload.to_record())
     except ValueError as error:
@@ -341,7 +383,7 @@ def record_feedback(payload: FeedbackIn) -> dict:
 
 
 @app.post("/personal-kb/proposals")
-def create_preference_proposal(payload: PreferenceProposalIn) -> dict:
+def create_preference_proposal(payload: PreferenceProposalIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return core.kb_store.propose(payload.to_proposal())
     except ValueError as error:
@@ -349,7 +391,9 @@ def create_preference_proposal(payload: PreferenceProposalIn) -> dict:
 
 
 @app.post("/personal-kb/proposals/{proposal_id}/decision")
-def decide_preference_proposal(proposal_id: str, payload: ProposalDecisionIn) -> dict:
+def decide_preference_proposal(
+    proposal_id: str, payload: ProposalDecisionIn, _auth: None = Depends(require_api_key)
+) -> dict:
     try:
         return core.kb_store.decide(proposal_id, payload.decision, payload.note)
     except KeyError as error:
@@ -364,12 +408,12 @@ def list_personal_kb_entries() -> list[dict]:
 
 
 @app.post("/tasks")
-def create_task(payload: TaskIn) -> dict:
+def create_task(payload: TaskIn, _auth: None = Depends(require_api_key)) -> dict:
     return core.create_task(TaskRequest(**payload.model_dump())).to_dict()
 
 
 @app.post("/lecture-plans")
-def create_lecture_plan(payload: LecturePlanIn) -> dict:
+def create_lecture_plan(payload: LecturePlanIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_lecture_plan(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -377,22 +421,18 @@ def create_lecture_plan(payload: LecturePlanIn) -> dict:
 
 
 @app.post("/lecture-plans/docx")
-def create_lecture_plan_docx(payload: LecturePlanIn) -> FileResponse:
+def create_lecture_plan_docx(
+    payload: LecturePlanIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         plan = build_lecture_plan(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "lecture_plan.docx"
-    export_docx(plan, destination)
-    return FileResponse(
-        destination,
-        filename="lecture_plan.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    return _docx_response(lambda path: export_docx(plan, path), "lecture_plan.docx", background)
 
 
 @app.post("/writing-drafts")
-def create_writing_draft(payload: WritingDraftIn) -> dict:
+def create_writing_draft(payload: WritingDraftIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_writing_draft(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -400,45 +440,51 @@ def create_writing_draft(payload: WritingDraftIn) -> dict:
 
 
 @app.post("/writing-drafts/docx")
-def create_writing_draft_docx(payload: WritingDraftIn) -> FileResponse:
+def create_writing_draft_docx(
+    payload: WritingDraftIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         draft = build_writing_draft(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "writing_draft.docx"
-    export_writing_docx(draft, destination)
-    return FileResponse(
-        destination,
-        filename="writing_draft.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    return _docx_response(lambda path: export_writing_docx(draft, path), "writing_draft.docx", background)
 
 
 @app.post("/research-briefs")
-def create_research_brief(payload: ResearchBriefIn) -> dict:
+def create_research_brief(payload: ResearchBriefIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_research_brief(payload.to_agent_request()).to_dict()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+@app.post("/research-briefs/agentic")
+def create_agentic_research_brief(payload: ResearchBriefIn, _auth: None = Depends(require_api_key)) -> dict:
+    """Run the tool-using, LLM-synthesising research agent (safe with no LLM key)."""
+    try:
+        result = run_agentic_research_brief(
+            payload.to_agent_request(),
+            provider=get_provider(),
+            crossref=_crossref_client(),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return result.to_dict()
+
+
 @app.post("/research-briefs/docx")
-def create_research_brief_docx(payload: ResearchBriefIn) -> FileResponse:
+def create_research_brief_docx(
+    payload: ResearchBriefIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         brief = build_research_brief(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "research_brief.docx"
-    export_research_docx(brief, destination)
-    return FileResponse(
-        destination,
-        filename="research_brief.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    return _docx_response(lambda path: export_research_docx(brief, path), "research_brief.docx", background)
 
 
 @app.post("/research-briefs/bibtex")
-def create_research_bibtex(payload: ResearchBriefIn) -> PlainTextResponse:
+def create_research_bibtex(payload: ResearchBriefIn, _auth: None = Depends(require_api_key)) -> PlainTextResponse:
     try:
         brief = build_research_brief(payload.to_agent_request())
     except ValueError as error:
@@ -447,7 +493,7 @@ def create_research_bibtex(payload: ResearchBriefIn) -> PlainTextResponse:
 
 
 @app.post("/assessment-blueprints")
-def create_assessment_blueprint(payload: AssessmentBlueprintIn) -> dict:
+def create_assessment_blueprint(payload: AssessmentBlueprintIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_assessment_blueprint(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -455,37 +501,33 @@ def create_assessment_blueprint(payload: AssessmentBlueprintIn) -> dict:
 
 
 @app.post("/assessment-blueprints/student-docx")
-def create_assessment_student_docx(payload: AssessmentBlueprintIn) -> FileResponse:
+def create_assessment_student_docx(
+    payload: AssessmentBlueprintIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         blueprint = build_assessment_blueprint(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "student_assessment_blueprint.docx"
-    export_student_docx(blueprint, destination)
-    return FileResponse(
-        destination,
-        filename="student_assessment_blueprint.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    return _docx_response(
+        lambda path: export_student_docx(blueprint, path), "student_assessment_blueprint.docx", background
     )
 
 
 @app.post("/assessment-blueprints/instructor-docx")
-def create_assessment_instructor_docx(payload: AssessmentBlueprintIn) -> FileResponse:
+def create_assessment_instructor_docx(
+    payload: AssessmentBlueprintIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         blueprint = build_assessment_blueprint(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "instructor_assessment_blueprint.docx"
-    export_instructor_docx(blueprint, destination)
-    return FileResponse(
-        destination,
-        filename="instructor_assessment_blueprint.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    return _docx_response(
+        lambda path: export_instructor_docx(blueprint, path), "instructor_assessment_blueprint.docx", background
     )
 
 
 @app.post("/content-packages")
-def create_content_package(payload: ContentPackageIn) -> dict:
+def create_content_package(payload: ContentPackageIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_content_package(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -493,22 +535,18 @@ def create_content_package(payload: ContentPackageIn) -> dict:
 
 
 @app.post("/content-packages/docx")
-def create_content_package_docx(payload: ContentPackageIn) -> FileResponse:
+def create_content_package_docx(
+    payload: ContentPackageIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         package = build_content_package(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "content_package.docx"
-    export_content_docx(package, destination)
-    return FileResponse(
-        destination,
-        filename="content_package.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    return _docx_response(lambda path: export_content_docx(package, path), "content_package.docx", background)
 
 
 @app.post("/social-media-packages")
-def create_social_media_package(payload: SocialMediaPackageIn) -> dict:
+def create_social_media_package(payload: SocialMediaPackageIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_social_media_package(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -516,22 +554,20 @@ def create_social_media_package(payload: SocialMediaPackageIn) -> dict:
 
 
 @app.post("/social-media-packages/docx")
-def create_social_media_package_docx(payload: SocialMediaPackageIn) -> FileResponse:
+def create_social_media_package_docx(
+    payload: SocialMediaPackageIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         package = build_social_media_package(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "social_media_package.docx"
-    export_social_media_docx(package, destination)
-    return FileResponse(
-        destination,
-        filename="social_media_package.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    return _docx_response(
+        lambda path: export_social_media_docx(package, path), "social_media_package.docx", background
     )
 
 
 @app.post("/portfolio-packages")
-def create_portfolio_package(payload: PortfolioPackageIn) -> dict:
+def create_portfolio_package(payload: PortfolioPackageIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_portfolio_package(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -539,22 +575,18 @@ def create_portfolio_package(payload: PortfolioPackageIn) -> dict:
 
 
 @app.post("/portfolio-packages/docx")
-def create_portfolio_package_docx(payload: PortfolioPackageIn) -> FileResponse:
+def create_portfolio_package_docx(
+    payload: PortfolioPackageIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         package = build_portfolio_package(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "portfolio_package.docx"
-    export_portfolio_docx(package, destination)
-    return FileResponse(
-        destination,
-        filename="portfolio_package.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    return _docx_response(lambda path: export_portfolio_docx(package, path), "portfolio_package.docx", background)
 
 
 @app.post("/autoeval-reports")
-def create_autoeval_report(payload: AutoEvalReportIn) -> dict:
+def create_autoeval_report(payload: AutoEvalReportIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return evaluate_deliverable(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -562,18 +594,14 @@ def create_autoeval_report(payload: AutoEvalReportIn) -> dict:
 
 
 @app.post("/autoeval-reports/docx")
-def create_autoeval_report_docx(payload: AutoEvalReportIn) -> FileResponse:
+def create_autoeval_report_docx(
+    payload: AutoEvalReportIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+) -> FileResponse:
     try:
         report = evaluate_deliverable(payload.to_agent_request())
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    destination = Path("artifacts") / "autoeval_report.docx"
-    export_autoeval_docx(report, destination)
-    return FileResponse(
-        destination,
-        filename="autoeval_report.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    return _docx_response(lambda path: export_autoeval_docx(report, path), "autoeval_report.docx", background)
 
 
 @app.get("/tasks/{task_id}")
@@ -585,8 +613,8 @@ def get_task(task_id: str) -> dict:
 
 
 @app.post("/tasks/{task_id}/approval")
-def approval(task_id: str, payload: ApprovalIn) -> dict:
+def approval(task_id: str, payload: ApprovalIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
-        return core.decide(task_id, payload.decision, payload.note)
+        return core.decide(task_id, payload.decision, payload.note, approved_by=payload.approved_by)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
