@@ -26,7 +26,13 @@ class TaskStore:
             )
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.path)
+        # check_same_thread=False lets the connection be used across the ASGI
+        # threadpool; WAL + a busy timeout keep concurrent readers/writers from
+        # failing with "database is locked" under real load.
+        connection = sqlite3.connect(self.path, check_same_thread=False, timeout=5.0)
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA busy_timeout=5000")
+        return connection
 
     def save(self, record: TaskRecord) -> None:
         payload = json.dumps(record.to_dict())

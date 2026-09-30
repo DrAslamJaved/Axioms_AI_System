@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from fastapi import BackgroundTasks
+
 from axioms.api import (
     AssessmentBlueprintIn,
     AutoEvalReportIn,
@@ -60,7 +62,7 @@ def test_lecture_plan_handler_returns_duration_accurate_plan() -> None:
 
 def test_lecture_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    response = create_lecture_plan_docx(lecture_payload())
+    response = create_lecture_plan_docx(lecture_payload(), BackgroundTasks())
     assert response.media_type == (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
@@ -88,7 +90,7 @@ def test_writing_draft_handler_returns_review_first_draft() -> None:
 
 def test_writing_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    response = create_writing_draft_docx(writing_payload())
+    response = create_writing_draft_docx(writing_payload(), BackgroundTasks())
     document = Path(response.path)
     assert document.exists()
     assert document.read_bytes()[:2] == b"PK"
@@ -122,7 +124,7 @@ def test_research_brief_handler_exposes_verification_state() -> None:
 
 def test_research_export_handlers_return_docx_and_bibtex(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    docx_response = create_research_brief_docx(research_payload())
+    docx_response = create_research_brief_docx(research_payload(), BackgroundTasks())
     assert Path(docx_response.path).read_bytes()[:2] == b"PK"
     bibtex_response = create_research_bibtex(research_payload())
     assert "10.1000/example.doi" in bibtex_response.body.decode()
@@ -151,8 +153,8 @@ def test_assessment_handler_has_exact_mark_allocation() -> None:
 
 def test_assessment_export_handlers_separate_student_and_instructor_docs(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    student = create_assessment_student_docx(assessment_payload())
-    instructor = create_assessment_instructor_docx(assessment_payload())
+    student = create_assessment_student_docx(assessment_payload(), BackgroundTasks())
+    instructor = create_assessment_instructor_docx(assessment_payload(), BackgroundTasks())
     assert Path(student.path).read_bytes()[:2] == b"PK"
     assert Path(instructor.path).read_bytes()[:2] == b"PK"
 
@@ -177,7 +179,7 @@ def test_content_handler_returns_a_review_first_package() -> None:
 
 def test_content_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    response = create_content_package_docx(content_payload())
+    response = create_content_package_docx(content_payload(), BackgroundTasks())
     assert Path(response.path).read_bytes()[:2] == b"PK"
 
 
@@ -201,7 +203,7 @@ def test_social_media_handler_returns_drafts_without_external_action() -> None:
 
 def test_social_media_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    response = create_social_media_package_docx(social_media_payload())
+    response = create_social_media_package_docx(social_media_payload(), BackgroundTasks())
     assert Path(response.path).read_bytes()[:2] == b"PK"
 
 
@@ -230,7 +232,7 @@ def test_portfolio_handler_returns_review_only_package() -> None:
 
 def test_portfolio_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    response = create_portfolio_package_docx(portfolio_payload())
+    response = create_portfolio_package_docx(portfolio_payload(), BackgroundTasks())
     assert Path(response.path).read_bytes()[:2] == b"PK"
 
 
@@ -251,7 +253,7 @@ def test_autoeval_handler_returns_review_signal_without_release_approval() -> No
 
 def test_autoeval_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    response = create_autoeval_report_docx(autoeval_payload())
+    response = create_autoeval_report_docx(autoeval_payload(), BackgroundTasks())
     assert Path(response.path).read_bytes()[:2] == b"PK"
 
 

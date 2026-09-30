@@ -31,6 +31,12 @@ class ApprovalDecision(StrEnum):
     REJECT = "reject"
 
 
+class RiskTier(StrEnum):
+    LOW = "low"
+    ELEVATED = "elevated"
+    HIGH = "high"
+
+
 @dataclass(slots=True)
 class TaskRequest:
     goal: str
@@ -66,6 +72,9 @@ class TaskRecord:
     subtasks: list[Subtask] = field(default_factory=list)
     deliverables: list[Deliverable] = field(default_factory=list)
     approval_note: str | None = None
+    approved_by: str | None = None
+    risk_tier: RiskTier = RiskTier.LOW
+    policy_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

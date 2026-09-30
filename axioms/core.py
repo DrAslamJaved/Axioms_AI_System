@@ -8,7 +8,7 @@ from axioms.agents import (
     specialist_draft,
     writing_draft,
 )
-from axioms.models import AgentName, ApprovalDecision, TaskRecord, TaskRequest, TaskStatus
+from axioms.models import AgentName, ApprovalDecision, RiskTier, TaskRecord, TaskRequest, TaskStatus
 from axioms.personal_kb import PersonalKnowledgeStore
 from axioms.policy import assess_request
 from axioms.routing import build_task_graph
@@ -39,16 +39,25 @@ class AxiomsCore:
                 record.deliverables.append(specialist_draft(request, subtask.agent))
         policy = assess_request(request)
         record.status = TaskStatus.PENDING_APPROVAL if policy.requires_approval else TaskStatus.PLANNED
+        record.risk_tier = policy.risk_tier
+        record.policy_reason = policy.reason
         self.store.save(record)
         return record
 
-    def decide(self, task_id: str, decision: ApprovalDecision, note: str | None = None) -> dict:
+    def decide(
+        self,
+        task_id: str,
+        decision: ApprovalDecision,
+        note: str | None = None,
+        approved_by: str | None = None,
+    ) -> dict:
         payload = self.store.get(task_id)
         if payload is None:
             raise KeyError(task_id)
         status = TaskStatus.APPROVED if decision is ApprovalDecision.APPROVE else TaskStatus.REJECTED
         payload["status"] = status.value
         payload["approval_note"] = note
+        payload["approved_by"] = approved_by
         for deliverable in payload["deliverables"]:
             deliverable["status"] = status.value
         self.store.save(_record_from_payload(payload))
@@ -61,6 +70,10 @@ def _record_from_payload(payload: dict) -> TaskRecord:
     record = TaskRecord(request=request, task_id=payload["task_id"], created_at=payload["created_at"])
     record.status = TaskStatus(payload["status"])
     record.approval_note = payload.get("approval_note")
+    record.approved_by = payload.get("approved_by")
+    if payload.get("risk_tier"):
+        record.risk_tier = RiskTier(payload["risk_tier"])
+    record.policy_reason = payload.get("policy_reason")
     from axioms.models import Deliverable, Subtask
 
     record.subtasks = [
