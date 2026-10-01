@@ -14,5 +14,5 @@ _TMP_DB = Path(tempfile.gettempdir()) / "axioms_test_db" / "axioms.sqlite3"
 _TMP_DB.parent.mkdir(parents=True, exist_ok=True)
 os.environ["AXIOMS_DATABASE_URL"] = f"sqlite:///{_TMP_DB}"
 
-for _var in ("AXIOMS_API_KEY", "AXIOMS_LLM_PROVIDER", "AXIOMS_APPROVAL_MODE", "AXIOMS_LLM_MODEL"):
+for _var in ("AXIOMS_API_KEY", "AXIOMS_API_KEYS", "AXIOMS_LLM_PROVIDER", "AXIOMS_APPROVAL_MODE", "AXIOMS_LLM_MODEL"):
     os.environ.pop(_var, None)

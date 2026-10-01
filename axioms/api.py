@@ -28,10 +28,10 @@ from axioms.autoeval_agent import (
 from axioms.autoeval_agent import export_docx as export_autoeval_docx
 from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, build_content_package
 from axioms.content_agent import export_docx as export_content_docx
-from axioms.core import AxiomsCore
+from axioms.core import AxiomsCore, BlockedApprovalError
 from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
-from axioms.llm import get_provider
+from axioms.llm import LLMConfigurationError, get_provider
 from axioms.models import AgentName, ApprovalDecision, TaskRequest
 from axioms.personal_kb import (
     FeedbackRecord,
@@ -59,7 +59,7 @@ from axioms.research_agent import (
 )
 from axioms.research_agent import export_docx as export_research_docx
 from axioms.research_agent_ai import run_agentic_research_brief
-from axioms.security import auth_enabled, require_api_key
+from axioms.security import auth_mode, require_api_key, resolve_principal
 from axioms.social_media_agent import (
     RecentSocialPost,
     SocialMediaRequest,
@@ -111,6 +111,7 @@ class ApprovalIn(BaseModel):
     decision: ApprovalDecision
     approved_by: str = Field(min_length=2, max_length=200)
     note: str | None = Field(default=None, max_length=2000)
+    override_blocking: bool = False
 
 
 class LecturePlanIn(BaseModel):
@@ -358,7 +359,7 @@ def health() -> dict[str, str]:
     return {
         "status": "ok",
         "mode": "human-governed",
-        "auth": "enabled" if auth_enabled() else "open-dev",
+        "auth": auth_mode(),
         "llm_provider": provider_name,
         "approval_mode": os.getenv("AXIOMS_APPROVAL_MODE", STRICT_MODE),
     }
@@ -462,9 +463,16 @@ def create_research_brief(payload: ResearchBriefIn, _auth: None = Depends(requir
 def create_agentic_research_brief(payload: ResearchBriefIn, _auth: None = Depends(require_api_key)) -> dict:
     """Run the tool-using, LLM-synthesising research agent (safe with no LLM key)."""
     try:
+        provider = get_provider()
+    except LLMConfigurationError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM provider misconfigured: {error}. The agent cannot synthesise until this is resolved.",
+        ) from error
+    try:
         result = run_agentic_research_brief(
             payload.to_agent_request(),
-            provider=get_provider(),
+            provider=provider,
             crossref=_crossref_client(),
         )
     except ValueError as error:
@@ -613,8 +621,23 @@ def get_task(task_id: str) -> dict:
 
 
 @app.post("/tasks/{task_id}/approval")
-def approval(task_id: str, payload: ApprovalIn, _auth: None = Depends(require_api_key)) -> dict:
+def approval(
+    task_id: str,
+    payload: ApprovalIn,
+    _auth: None = Depends(require_api_key),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    # In named-key mode the principal is derived from the key and overrides the body.
+    approver = principal or payload.approved_by
     try:
-        return core.decide(task_id, payload.decision, payload.note, approved_by=payload.approved_by)
+        return core.decide(
+            task_id,
+            payload.decision,
+            payload.note,
+            approved_by=approver,
+            override_blocking=payload.override_blocking,
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
+    except BlockedApprovalError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error

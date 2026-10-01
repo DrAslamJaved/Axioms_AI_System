@@ -8,22 +8,64 @@ API_URL = os.getenv("AXIOMS_API_URL", "http://api:8000")
 
 st.set_page_config(page_title="Axioms AI System", page_icon="⚙️")
 st.title("Axioms AI System")
-st.caption("Human-governed foundation MVP — drafts remain pending until you approve them.")
+st.caption("Human-governed agentic research and teaching assistant.")
+
+# --- Sidebar: authentication and system posture ---
+
+with st.sidebar:
+    st.header("Authentication")
+    api_key = st.text_input("API key", type="password", help="Set AXIOMS_API_KEY or AXIOMS_API_KEYS on the server.")
+    approver_name = st.text_input(
+        "Approver name",
+        value="Dr Aslam",
+        help="Used for approval identity in single-key mode. In named-key mode this is derived from the key.",
+    )
+    st.divider()
+    st.caption("System posture")
+    try:
+        health = requests.get(f"{API_URL}/health", timeout=10).json()
+        st.write(f"Auth: **{health.get('auth', 'unknown')}**")
+        st.write(f"LLM: **{health.get('llm_provider', 'unknown')}**")
+        st.write(f"Approval: **{health.get('approval_mode', 'unknown')}**")
+    except Exception:  # noqa: BLE001
+        st.warning("Cannot reach the API server.")
+
+
+def _headers() -> dict[str, str]:
+    """Build request headers, including the API key when configured."""
+    if api_key:
+        return {"X-API-Key": api_key}
+    return {}
+
+
+def _post(url: str, payload: dict, *, timeout: int = 30) -> requests.Response:
+    return requests.post(url, json=payload, headers=_headers(), timeout=timeout)
+
+
+def _get(url: str, *, timeout: int = 20) -> requests.Response:
+    return requests.get(url, headers=_headers(), timeout=timeout)
+
+
+# --- System readiness ---
 
 with st.expander("System integration readiness", expanded=False):
-    readiness_response = requests.get(f"{API_URL}/system/readiness", timeout=20)
-    readiness_response.raise_for_status()
-    readiness = readiness_response.json()
-    st.write(f"Implemented specialist agents: {readiness['specialist_agent_count']}")
-    st.caption("External actions are disabled; human approval remains mandatory.")
-    st.dataframe(
-        [
-            {"Component": item["name"], "State": item["state"], "Detail": item["detail"]}
-            for item in readiness["components"]
-        ],
-        hide_index=True,
-        use_container_width=True,
-    )
+    try:
+        readiness_response = _get(f"{API_URL}/system/readiness")
+        readiness_response.raise_for_status()
+        readiness = readiness_response.json()
+        st.write(f"Implemented specialist agents: {readiness['specialist_agent_count']}")
+        st.dataframe(
+            [
+                {"Component": item["name"], "State": item["state"], "Detail": item["detail"]}
+                for item in readiness["components"]
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+    except Exception as error:  # noqa: BLE001
+        st.error(f"Could not load readiness report: {error}")
+
+# --- Personal Knowledge Base governance ---
 
 with st.expander("Personal Knowledge Base governance", expanded=False):
     st.caption("Feedback is recorded separately. Preferences become active only after explicit approval.")
@@ -37,40 +79,45 @@ with st.expander("Personal Knowledge Base governance", expanded=False):
         kb_rationale = st.text_area("Rationale", value="Proposed explicitly by the owner for future drafts.")
         kb_submitted = st.form_submit_button("Create approval-required KB proposal")
     if kb_submitted:
-        response = requests.post(
+        response = _post(
             f"{API_URL}/personal-kb/proposals",
-            json={
+            {
                 "category": kb_category,
                 "preference_key": kb_key,
                 "preference_value": kb_value,
                 "rationale": kb_rationale,
             },
-            timeout=20,
         )
-        response.raise_for_status()
-        st.session_state["kb_proposal"] = response.json()
+        if response.ok:
+            st.session_state["kb_proposal"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
     proposal = st.session_state.get("kb_proposal")
     if proposal:
         st.info(f"Proposal {proposal['proposal_id']} is pending your approval.")
         approve, reject = st.columns(2)
         if approve.button("Approve KB proposal"):
-            response = requests.post(
+            response = _post(
                 f"{API_URL}/personal-kb/proposals/{proposal['proposal_id']}/decision",
-                json={"decision": "approve", "note": "Approved by owner through review UI."},
-                timeout=20,
+                {"decision": "approve", "note": f"Approved by {approver_name} through review UI."},
             )
-            response.raise_for_status()
-            st.session_state["kb_proposal"] = response.json()
-            st.rerun()
+            if response.ok:
+                st.session_state["kb_proposal"] = response.json()
+                st.rerun()
+            else:
+                st.error(f"Error {response.status_code}: {response.text}")
         if reject.button("Reject KB proposal"):
-            response = requests.post(
+            response = _post(
                 f"{API_URL}/personal-kb/proposals/{proposal['proposal_id']}/decision",
-                json={"decision": "reject", "note": "Rejected by owner through review UI."},
-                timeout=20,
+                {"decision": "reject", "note": f"Rejected by {approver_name} through review UI."},
             )
-            response.raise_for_status()
-            st.session_state["kb_proposal"] = response.json()
-            st.rerun()
+            if response.ok:
+                st.session_state["kb_proposal"] = response.json()
+                st.rerun()
+            else:
+                st.error(f"Error {response.status_code}: {response.text}")
+
+# --- Lecture plan ---
 
 with st.expander("Create a structured lecture plan", expanded=True):
     with st.form("lecture-plan"):
@@ -98,9 +145,11 @@ with st.expander("Create a structured lecture plan", expanded=True):
             "application_context": application or None,
             "include_computational_activity": include_code,
         }
-        response = requests.post(f"{API_URL}/lecture-plans", json=payload, timeout=20)
-        response.raise_for_status()
-        st.session_state["lecture_plan"] = response.json()
+        response = _post(f"{API_URL}/lecture-plans", payload)
+        if response.ok:
+            st.session_state["lecture_plan"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
 
 plan = st.session_state.get("lecture_plan")
 if plan:
@@ -116,6 +165,8 @@ if plan:
     st.markdown("**Instructor review checklist**")
     for item in plan["review_checklist"]:
         st.checkbox(item, key=f"review_{item}")
+
+# --- Writing draft ---
 
 with st.expander("Create a structured writing draft", expanded=True):
     with st.form("writing-draft"):
@@ -141,9 +192,11 @@ with st.expander("Create a structured writing draft", expanded=True):
             "verified_facts": [item.strip() for item in verified_facts.splitlines() if item.strip()],
             "tone": tone,
         }
-        response = requests.post(f"{API_URL}/writing-drafts", json=payload, timeout=20)
-        response.raise_for_status()
-        st.session_state["writing_draft"] = response.json()
+        response = _post(f"{API_URL}/writing-drafts", payload)
+        if response.ok:
+            st.session_state["writing_draft"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
 
 draft = st.session_state.get("writing_draft")
 if draft:
@@ -157,6 +210,8 @@ if draft:
     st.markdown("**Evidence review before use**")
     for item in draft["evidence_checklist"]:
         st.checkbox(item, key=f"evidence_{item}")
+
+# --- Research brief (deterministic) ---
 
 with st.expander("Create an evidence-first research brief", expanded=True):
     with st.form("research-brief"):
@@ -194,13 +249,14 @@ with st.expander("Create an evidence-first research brief", expanded=True):
         except json.JSONDecodeError as error:
             st.error(f"The source JSON is invalid: {error.msg}")
         else:
-            response = requests.post(
+            response = _post(
                 f"{API_URL}/research-briefs",
-                json={"research_question": research_question, "scope": research_scope, "sources": sources},
-                timeout=20,
+                {"research_question": research_question, "scope": research_scope, "sources": sources},
             )
-            response.raise_for_status()
-            st.session_state["research_brief"] = response.json()
+            if response.ok:
+                st.session_state["research_brief"] = response.json()
+            else:
+                st.error(f"Error {response.status_code}: {response.text}")
 
 brief = st.session_state.get("research_brief")
 if brief:
@@ -222,6 +278,110 @@ if brief:
     st.markdown("**Verification queue**")
     for item in brief["verification_queue"]:
         st.write(f"- {item}")
+
+# --- Agentic research brief (NEW) ---
+
+with st.expander("Run the agentic research agent", expanded=True):
+    st.caption(
+        "Tool-using agent: verifies DOIs against Crossref, synthesises verified claims "
+        "through a constrained LLM prompt, and runs an AutoEval guardrail. Works with "
+        "or without an LLM configured (synthesis is skipped when disabled)."
+    )
+    with st.form("agentic-research"):
+        ag_question = st.text_area(
+            "Research question",
+            value="How can fuzzy similarity measures support drug-drug interaction prediction?",
+        )
+        ag_scope = st.text_area(
+            "Scope",
+            value="Map methods, datasets, metrics, and limitations using verified source records.",
+        )
+        ag_sources_json = st.text_area(
+            "Evidence sources (JSON array — same format as the deterministic brief)",
+            value='''[
+  {
+    "source_id": "S01",
+    "title": "Author-verified example record",
+    "authors": ["Author"],
+    "year": 2026,
+    "publication_kind": "journal_article",
+    "doi": "10.1000/example.doi",
+    "peer_reviewed": true,
+    "supported_claim": "Replace with an author-verified, source-linked claim.",
+    "verification_status": "claim_verified",
+    "verification_evidence": "Author confirmed the metadata and claim."
+  }
+]''',
+            height=250,
+        )
+        ag_submitted = st.form_submit_button("Run agentic research brief")
+
+    if ag_submitted:
+        try:
+            ag_sources = json.loads(ag_sources_json)
+        except json.JSONDecodeError as error:
+            st.error(f"The source JSON is invalid: {error.msg}")
+        else:
+            with st.spinner("Running agentic research loop (Crossref + optional synthesis)..."):
+                response = _post(
+                    f"{API_URL}/research-briefs/agentic",
+                    {"research_question": ag_question, "scope": ag_scope, "sources": ag_sources},
+                    timeout=60,
+                )
+            if response.ok:
+                st.session_state["agentic_result"] = response.json()
+            else:
+                st.error(f"Error {response.status_code}: {response.text}")
+
+agentic = st.session_state.get("agentic_result")
+if agentic:
+    st.subheader("Agentic research result")
+    st.caption("Draft for human review — not a published conclusion.")
+
+    if agentic.get("discrepancies"):
+        st.warning("**Discrepancies detected**")
+        for item in agentic["discrepancies"]:
+            st.write(f"⚠️ {item}")
+
+    if agentic.get("synthesis"):
+        st.markdown("**Constrained synthesis**")
+        st.write(agentic["synthesis"])
+    else:
+        st.info("No synthesis produced (LLM may be disabled, or no claim-verified sources).")
+
+    if agentic.get("autoeval"):
+        ae = agentic["autoeval"]
+        st.metric("AutoEval grounding", f"{ae['quality_signal_percent']}%")
+        if ae.get("missing_required_elements"):
+            st.warning(f"Uncited verified sources: {', '.join(ae['missing_required_elements'])}")
+
+    st.markdown("**Agent trace**")
+    st.dataframe(
+        [
+            {"Step": item["kind"], "Summary": item["summary"], "Detail": item["detail"]}
+            for item in agentic.get("agent_trace", [])
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    st.markdown("**Source audit (from deterministic brief)**")
+    if agentic.get("brief", {}).get("source_audit"):
+        st.dataframe(
+            [
+                {
+                    "Source": item["source_id"],
+                    "Verification": item["verification_status"],
+                    "Eligible": item["synthesis_eligible"],
+                    "Finding": item["finding"],
+                }
+                for item in agentic["brief"]["source_audit"]
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+
+# --- Assessment blueprint ---
 
 with st.expander("Create an instructor assessment blueprint", expanded=True):
     with st.form("assessment-blueprint"):
@@ -260,9 +420,11 @@ with st.expander("Create an instructor assessment blueprint", expanded=True):
             ],
             "approved_source_scope": source_scope,
         }
-        response = requests.post(f"{API_URL}/assessment-blueprints", json=payload, timeout=20)
-        response.raise_for_status()
-        st.session_state["assessment_blueprint"] = response.json()
+        response = _post(f"{API_URL}/assessment-blueprints", payload)
+        if response.ok:
+            st.session_state["assessment_blueprint"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
 
 assessment = st.session_state.get("assessment_blueprint")
 if assessment:
@@ -285,6 +447,8 @@ if assessment:
     st.markdown("**AI-resilience review**")
     for item in assessment["ai_resilience_review"]:
         st.write(f"- {item}")
+
+# --- Content package ---
 
 with st.expander("Create an educational content package", expanded=True):
     with st.form("content-package"):
@@ -313,9 +477,11 @@ with st.expander("Create an educational content package", expanded=True):
             "learning_outcomes": [item.strip() for item in content_outcomes.splitlines() if item.strip()],
             "language_mode": language_mode,
         }
-        response = requests.post(f"{API_URL}/content-packages", json=payload, timeout=20)
-        response.raise_for_status()
-        st.session_state["content_package"] = response.json()
+        response = _post(f"{API_URL}/content-packages", payload)
+        if response.ok:
+            st.session_state["content_package"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
 
 content = st.session_state.get("content_package")
 if content:
@@ -332,6 +498,8 @@ if content:
     st.markdown("**Accessibility checks**")
     for item in content["accessibility_checks"]:
         st.checkbox(item, key=f"access_{item}")
+
+# --- Social media package ---
 
 with st.expander("Create a reviewed social-media package", expanded=True):
     with st.form("social-media-package"):
@@ -364,9 +532,11 @@ with st.expander("Create a reviewed social-media package", expanded=True):
             "verified_facts": [item.strip() for item in social_facts.splitlines() if item.strip()],
             "calendar_weeks": social_weeks,
         }
-        response = requests.post(f"{API_URL}/social-media-packages", json=payload, timeout=20)
-        response.raise_for_status()
-        st.session_state["social_media_package"] = response.json()
+        response = _post(f"{API_URL}/social-media-packages", payload)
+        if response.ok:
+            st.session_state["social_media_package"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
 
 social = st.session_state.get("social_media_package")
 if social:
@@ -393,6 +563,8 @@ if social:
     st.markdown("**Publication checks**")
     for item in social["publication_checks"]:
         st.checkbox(item, key=f"social_{item}")
+
+# --- Portfolio package ---
 
 with st.expander("Create a STEM AI portfolio package", expanded=True):
     with st.form("portfolio-package"):
@@ -433,9 +605,11 @@ with st.expander("Create a STEM AI portfolio package", expanded=True):
             "repository_visibility": portfolio_visibility,
             "verified_evidence": evidence_items,
         }
-        response = requests.post(f"{API_URL}/portfolio-packages", json=payload, timeout=20)
-        response.raise_for_status()
-        st.session_state["portfolio_package"] = response.json()
+        response = _post(f"{API_URL}/portfolio-packages", payload)
+        if response.ok:
+            st.session_state["portfolio_package"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
 
 portfolio = st.session_state.get("portfolio_package")
 if portfolio:
@@ -450,6 +624,8 @@ if portfolio:
     st.markdown("**Reproducibility checklist**")
     for item in portfolio["reproducibility_checklist"]:
         st.checkbox(item, key=f"portfolio_{item}")
+
+# --- AutoEval report ---
 
 with st.expander("Create an AutoEval review report", expanded=True):
     with st.form("autoeval-report"):
@@ -489,9 +665,11 @@ with st.expander("Create an AutoEval review report", expanded=True):
             "public_facing": public_facing,
             "declared_sensitive_data": sensitive_data,
         }
-        response = requests.post(f"{API_URL}/autoeval-reports", json=payload, timeout=20)
-        response.raise_for_status()
-        st.session_state["autoeval_report"] = response.json()
+        response = _post(f"{API_URL}/autoeval-reports", payload)
+        if response.ok:
+            st.session_state["autoeval_report"] = response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
 
 autoeval = st.session_state.get("autoeval_report")
 if autoeval:
@@ -508,6 +686,8 @@ if autoeval:
     )
     st.warning(autoeval["review_boundary"])
 
+# --- Task creation and approval ---
+
 with st.form("new-task"):
     goal = st.text_area("What would you like to prepare?")
     audience = st.text_input("Audience", value="unspecified")
@@ -516,37 +696,63 @@ with st.form("new-task"):
     submitted = st.form_submit_button("Create reviewed draft")
 
 if submitted:
-    response = requests.post(
+    response = _post(
         f"{API_URL}/tasks",
-        json={"goal": goal, "audience": audience, "deadline": deadline or None, "external_delivery": external},
-        timeout=20,
+        {"goal": goal, "audience": audience, "deadline": deadline or None, "external_delivery": external},
     )
-    response.raise_for_status()
-    st.session_state["task"] = response.json()
+    if response.ok:
+        st.session_state["task"] = response.json()
+    else:
+        st.error(f"Error {response.status_code}: {response.text}")
 
 task = st.session_state.get("task")
 if task:
     st.subheader(f"Task {task['task_id']}")
-    st.info(f"Status: {task['status']}")
+    risk = task.get("risk_tier", "low")
+    if risk == "high":
+        st.error(f"Status: {task['status']} · Risk: **{risk.upper()}** (blocking)")
+    elif risk == "elevated":
+        st.warning(f"Status: {task['status']} · Risk: **{risk.upper()}**")
+    else:
+        st.info(f"Status: {task['status']} · Risk: {risk}")
+    if task.get("policy_reason"):
+        st.caption(task["policy_reason"])
     for deliverable in task["deliverables"]:
         with st.expander(deliverable["title"], expanded=True):
             st.markdown(deliverable["content"])
     col1, col2 = st.columns(2)
+    override = False
+    if risk == "high":
+        override = st.checkbox(
+            "I acknowledge the data-governance risk and override the block",
+            key="override_blocking",
+        )
     if col1.button("Approve drafts"):
-        response = requests.post(
+        response = _post(
             f"{API_URL}/tasks/{task['task_id']}/approval",
-            json={"decision": "approve", "note": "Approved by owner through review UI."},
-            timeout=20,
+            {
+                "decision": "approve",
+                "approved_by": approver_name,
+                "note": f"Approved by {approver_name} through review UI.",
+                "override_blocking": override,
+            },
         )
-        response.raise_for_status()
-        st.session_state["task"] = response.json()
-        st.rerun()
+        if response.ok:
+            st.session_state["task"] = response.json()
+            st.rerun()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
     if col2.button("Reject drafts"):
-        response = requests.post(
+        response = _post(
             f"{API_URL}/tasks/{task['task_id']}/approval",
-            json={"decision": "reject", "note": "Rejected by owner through review UI."},
-            timeout=20,
+            {
+                "decision": "reject",
+                "approved_by": approver_name,
+                "note": f"Rejected by {approver_name} through review UI.",
+            },
         )
-        response.raise_for_status()
-        st.session_state["task"] = response.json()
-        st.rerun()
+        if response.ok:
+            st.session_state["task"] = response.json()
+            st.rerun()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")

@@ -36,7 +36,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
     components = (
         IntegrationComponent("Axioms Core routing", IntegrationState.IMPLEMENTED, "Typed specialist routing with SQLite task episodes."),
         IntegrationComponent("Specialist registry", IntegrationState.IMPLEMENTED, "Eight review-first profiles with API endpoints."),
-        IntegrationComponent("Human approval boundary", IntegrationState.IMPLEMENTED, "Task approvals are recorded; external actions remain blocked."),
+        IntegrationComponent("Human approval boundary", IntegrationState.IMPLEMENTED, "Risk-tier classification (LOW/ELEVATED/HIGH) with blocking enforcement on HIGH-risk tasks."),
+        IntegrationComponent("API-key authentication", IntegrationState.IMPLEMENTED, "Named multi-key and single-key modes with principal resolution for authenticated approver identity."),
+        IntegrationComponent("LLM provider seam", IntegrationState.IMPLEMENTED, "Pluggable Anthropic/OpenAI backends with DisabledProvider safe default. Optional dependency."),
+        IntegrationComponent("Crossref DOI verification", IntegrationState.IMPLEMENTED, "Real external metadata verification tool with injectable transport for offline testing."),
+        IntegrationComponent("Agentic research agent", IntegrationState.IMPLEMENTED, "Tool-using, LLM-synthesising research vertical with bounded generation and AutoEval guardrail."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
         IntegrationComponent("Redis Streams dispatch", IntegrationState.DEFERRED, "Requires idempotency, retry, dead-letter, trace, and operational tests."),
         IntegrationComponent("Semantic retrieval memory", IntegrationState.DEFERRED, "Requires consent, provenance, retention, deletion, and evaluation controls."),
