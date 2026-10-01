@@ -126,7 +126,7 @@ def resolve_principal(x_api_key: str | None = Header(default=None, alias="X-API-
     named = _named_keys_or_service_error()
     if not named or not x_api_key:
         return None
-    for secret in named.values():
+    for principal, secret in named.items():
         if hmac.compare_digest(x_api_key, secret):
             return principal
     return None
