@@ -104,7 +104,7 @@ def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Ke
     if named:
         if not x_api_key:
             raise HTTPException(status_code=401, detail="Missing or invalid API key.")
-        for _principal, secret in named.items():
+        for secret in named.values():
             if hmac.compare_digest(x_api_key, secret):
                 return
         raise HTTPException(status_code=401, detail="Missing or invalid API key.")
@@ -126,7 +126,7 @@ def resolve_principal(x_api_key: str | None = Header(default=None, alias="X-API-
     named = _named_keys_or_service_error()
     if not named or not x_api_key:
         return None
-    for principal, secret in named.items():
+    for secret in named.values():
         if hmac.compare_digest(x_api_key, secret):
             return principal
     return None

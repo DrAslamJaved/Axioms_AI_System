@@ -3,7 +3,15 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from axioms.security import _named_keys, auth_enabled, auth_mode, configured_api_key, require_api_key, resolve_principal
+from axioms.security import (
+    SecurityConfigurationError,
+    _named_keys,
+    auth_enabled,
+    auth_mode,
+    configured_api_key,
+    require_api_key,
+    resolve_principal,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -58,19 +66,22 @@ def test_named_keys_parses_valid_json(monkeypatch) -> None:
     assert result == {"Dr Aslam": "key1", "Lab TA": "key2"}
 
 
-def test_named_keys_returns_none_on_invalid_json(monkeypatch) -> None:
+def test_named_keys_rejects_invalid_json(monkeypatch) -> None:
     monkeypatch.setenv("AXIOMS_API_KEYS", "not-json")
-    assert _named_keys() is None
+    with pytest.raises(SecurityConfigurationError):
+        _named_keys()
 
 
-def test_named_keys_returns_none_on_empty_object(monkeypatch) -> None:
+def test_named_keys_rejects_empty_object(monkeypatch) -> None:
     monkeypatch.setenv("AXIOMS_API_KEYS", "{}")
-    assert _named_keys() is None
+    with pytest.raises(SecurityConfigurationError):
+        _named_keys()
 
 
-def test_named_keys_returns_none_on_non_object(monkeypatch) -> None:
+def test_named_keys_rejects_non_object(monkeypatch) -> None:
     monkeypatch.setenv("AXIOMS_API_KEYS", '["a", "b"]')
-    assert _named_keys() is None
+    with pytest.raises(SecurityConfigurationError):
+        _named_keys()
 
 
 # ---------------------------------------------------------------------------
