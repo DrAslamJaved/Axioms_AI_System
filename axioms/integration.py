@@ -85,7 +85,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent(
             "Opt-in local parallel execution",
             IntegrationState.IMPLEMENTED,
-            "Independent validated graph-layer drafts can run locally with deterministic result ordering; sequential execution remains the default and final human review is required.",
+            "Independent validated graph-layer drafts can run locally with deterministic result ordering and a configurable 1–4 worker cap; sequential execution remains the default and final human review is required.",
         ),
         IntegrationComponent(
             "Cooperative local cancellation",
@@ -102,7 +102,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
         IntegrationComponent("Redis Streams dispatch", IntegrationState.DEFERRED, "Requires distributed-worker deployment, leases, delayed retry, recovery, metrics, and operational tests."),
         IntegrationComponent("Semantic retrieval memory", IntegrationState.DEFERRED, "Requires consent, provenance, retention, deletion, and evaluation controls."),
-        IntegrationComponent("Distributed parallel graph execution", IntegrationState.DEFERRED, "Requires distributed recovery, resource limits, worker leases, and operational tests."),
+        IntegrationComponent("Distributed parallel graph execution", IntegrationState.DEFERRED, "Requires distributed recovery, worker leases, and operational tests."),
         IntegrationComponent("Live external connectors", IntegrationState.DEFERRED, "Requires least-privilege credentials, dry-run contracts, rate limits, and approval scopes."),
         IntegrationComponent("Cloud deployment", IntegrationState.DEFERRED, "Requires hosting choice, secrets, threat model, backup/restore, and privacy review."),
     )
