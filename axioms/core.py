@@ -8,6 +8,7 @@ from axioms.agents import (
     specialist_draft,
     writing_draft,
 )
+from axioms.episodic_memory import EpisodicMemoryStore, MemoryDecision, MemoryProposal
 from axioms.models import (
     AgentName,
     AgentStep,
@@ -43,9 +44,15 @@ class AxiomsCore:
     external-write tools and cannot publish, send, schedule or modify accounts.
     """
 
-    def __init__(self, store: TaskStore | None = None, kb_store: PersonalKnowledgeStore | None = None) -> None:
+    def __init__(
+        self,
+        store: TaskStore | None = None,
+        kb_store: PersonalKnowledgeStore | None = None,
+        memory_store: EpisodicMemoryStore | None = None,
+    ) -> None:
         self.store = store or TaskStore()
         self.kb_store = kb_store or PersonalKnowledgeStore(self.store.path)
+        self.memory_store = memory_store or EpisodicMemoryStore(self.store.path)
 
     def create_task(self, request: TaskRequest) -> TaskRecord:
         record = TaskRecord(request=request, subtasks=build_task_graph(request))
@@ -156,6 +163,29 @@ class AxiomsCore:
         )
         self.store.save(record)
         return record.to_dict()
+
+    def propose_episodic_memory(self, task_id: str) -> dict:
+        """Create a human-review proposal from a completed, non-sensitive task episode."""
+        payload = self.store.get(task_id)
+        if payload is None:
+            raise KeyError(task_id)
+        if TaskStatus(payload["status"]) is not TaskStatus.COMPLETED:
+            raise TaskStateError("Only a completed task may be proposed for episodic memory.")
+        if payload.get("risk_tier") == RiskTier.HIGH.value:
+            raise TaskStateError("HIGH-risk task episodes are never eligible for episodic memory.")
+        agents = sorted({item["agent"] for item in payload["subtasks"]})
+        summary = f"Completed task: {payload['request']['goal']} | Agents: {', '.join(agents)}"
+        return self.memory_store.propose(
+            MemoryProposal(task_id=task_id, summary=summary, tags=tuple(agents))
+        )
+
+    def decide_episodic_memory(
+        self, proposal_id: str, decision: MemoryDecision, decided_by: str, note: str | None = None
+    ) -> dict:
+        return self.memory_store.decide(proposal_id, decision, decided_by, note)
+
+    def recall_episodic_memory(self, query: str, *, limit: int = 5) -> list[dict]:
+        return self.memory_store.search(query, limit=limit)
 
     def _record_final_review(
         self, payload: dict, decision: ApprovalDecision, note: str | None, reviewer: str | None
