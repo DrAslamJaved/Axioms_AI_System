@@ -51,6 +51,7 @@ class StepKind(StrEnum):
     EXECUTION_LAYER_COMPLETED = "execution_layer_completed"
     CANCELLATION_REQUESTED = "cancellation_requested"
     EXECUTION_CANCELLED = "execution_cancelled"
+    EXECUTION_RECOVERED = "execution_recovered"
     AGENT_DISPATCHED = "agent_dispatched"
     DELIVERABLE_CREATED = "deliverable_created"
     REVIEW_REQUIRED = "review_required"
