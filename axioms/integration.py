@@ -57,6 +57,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "Bounded LLM editorial review over deterministic social drafts; fact-reference guardrail with scheduling and publication blocked.",
         ),
+        IntegrationComponent(
+            "Agentic portfolio review",
+            IntegrationState.IMPLEMENTED,
+            "Bounded LLM readiness review over evidence-bound portfolio packages; evidence-ID guardrail and GitHub actions remain blocked.",
+        ),
         IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries are retained only after a separate owner decision."),
         IntegrationComponent("Similarity screening", IntegrationState.IMPLEMENTED, "Local token-shingle comparison against supplied texts; produces human-review signals, never a plagiarism verdict."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
