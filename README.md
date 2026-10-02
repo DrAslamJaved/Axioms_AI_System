@@ -21,6 +21,9 @@ real tool use and optional LLM synthesis:
 - **Research discovery** can use Tavily as a bounded, read-only search tool to
   collect unverified source candidates with retrieval provenance. Candidates
   cannot be cited or synthesised until they pass the existing verification flow.
+- **Similarity screening** compares a draft only against texts the reviewer
+  supplies, returning transparent overlap signals for human review. It is not a
+  plagiarism verdict, originality determination, or web-wide search.
 - **API-key authentication** with named-key principal resolution, so approver
   identity is derived from the authenticated key rather than self-asserted.
 - **LLM provider seam** supporting Anthropic, OpenAI, or disabled (the safe
@@ -131,6 +134,12 @@ curl -X POST http://127.0.0.1:8000/episodic-memory/proposals/{proposal_id}/decis
   -H "X-API-Key: your-secret" \
   -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Retain this reusable planning context"}'
 
+# Screen supplied text against a local comparison set; review any flagged overlap.
+curl -X POST http://127.0.0.1:8000/similarity/screen \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d @similarity_request.json
+
 # Run the agentic research agent (works with or without an LLM configured)
 curl -X POST http://127.0.0.1:8000/research-briefs/agentic \
   -H "Content-Type: application/json" \
@@ -157,6 +166,7 @@ Use `GET /system/readiness` for a full component report.
 | Research (deterministic) | `POST /research-briefs` | `POST /research-briefs/docx` |
 | Research (agentic) | `POST /research-briefs/agentic` | — |
 | Research discovery (read-only) | `POST /research/discover` | — |
+| Similarity screening (local review signal) | `POST /similarity/screen` | — |
 | Assessment Design | `POST /assessment-blueprints` | student + instructor DOCX |
 | Content Creation | `POST /content-packages` | `POST /content-packages/docx` |
 | Social Media | `POST /social-media-packages` | `POST /social-media-packages/docx` |
@@ -194,6 +204,7 @@ with real keys or enable external integrations until the security checklist is c
   guardrail checks that the output cites every verified source.
 - PKB changes are proposals until approved by the owner.
 - Episodic memory is opt-in per completed task; HIGH-risk episodes and sensitive text are rejected.
+- Similarity scores are review signals only; academic-integrity decisions remain human decisions.
 - Secrets remain in the deployment environment, never in Git.
 - The system defaults to disabled LLM and strict approval mode — safety is the
   starting position, not an opt-in.
