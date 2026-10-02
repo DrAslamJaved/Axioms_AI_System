@@ -1,4 +1,5 @@
 from pathlib import Path
+from threading import Barrier, current_thread
 
 import pytest
 
@@ -120,6 +121,47 @@ def test_mixed_goal_dispatches_every_planned_specialist(tmp_path: Path) -> None:
     }
     dispatched = [step for step in executed["agent_trace"] if step["kind"] == StepKind.AGENT_DISPATCHED]
     assert len(dispatched) == 2
+
+
+def test_parallel_execution_is_opt_in_and_keeps_deterministic_graph_order(
+    tmp_path: Path, monkeypatch
+) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture and write an announcement"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    original = core_module._run_local_draft
+    thread_names: list[str] = []
+    barrier = Barrier(2)
+
+    def capture_thread(request, subtask):
+        thread_names.append(current_thread().name)
+        barrier.wait(timeout=2)
+        return original(request, subtask)
+
+    monkeypatch.setattr(core_module, "_run_local_draft", capture_thread)
+    executed = core.execute(record.task_id, parallel=True)
+
+    assert [item["agent"] for item in executed["deliverables"]] == [
+        AgentName.LECTURE.value,
+        AgentName.WRITING.value,
+    ]
+    assert thread_names and all(name.startswith("axioms-local") for name in thread_names)
+    kinds = [step["kind"] for step in executed["agent_trace"]]
+    assert kinds.count(StepKind.EXECUTION_LAYER_STARTED) == 1
+    assert kinds.count(StepKind.EXECUTION_LAYER_COMPLETED) == 1
+
+
+def test_execution_rejects_a_task_with_a_changed_graph_digest(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    payload = core.store.get(record.task_id)
+    assert payload is not None
+    payload["graph_digest"] = "0" * 64
+    core.store.save(core_module._record_from_payload(payload))
+
+    with pytest.raises(TaskStateError, match="integrity check failed"):
+        core.execute(record.task_id)
 
 
 def test_specialist_handoffs_are_only_created_during_execution(tmp_path: Path) -> None:

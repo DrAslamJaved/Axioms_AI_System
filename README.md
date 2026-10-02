@@ -46,7 +46,10 @@ real tool use and optional LLM synthesis:
   perform external actions.
 - **Versioned task graphs** attach a deterministic `routing.v1` graph and hash
   to every task. Dependencies are validated for missing nodes and cycles before
-  approval; execution layers are recorded but are not yet run in parallel.
+  approval. `parallel=true` may run only independent local draft nodes in a
+  recorded layer; it preserves deterministic result ordering, remains opt-in,
+  and never enables external actions. Default execution and the durable worker
+  remain sequential.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -142,6 +145,11 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
 
 # Run the approved local plan. This creates review-only drafts; it performs no external action.
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/execute \
+  -H "X-API-Key: your-secret"
+
+# Optional: run only independent local graph-layer drafts concurrently.
+# Result ordering remains deterministic; external actions remain unavailable.
+curl -X POST "http://127.0.0.1:8000/tasks/{task_id}/execute?parallel=true" \
   -H "X-API-Key: your-secret"
 
 # Approve or reject the resulting drafts in a final human review.

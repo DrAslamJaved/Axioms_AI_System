@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from axioms.agents import (
     autoeval_draft,
     lecture_draft,
@@ -24,7 +26,7 @@ from axioms.models import (
 )
 from axioms.personal_kb import PersonalKnowledgeStore
 from axioms.policy import assess_request
-from axioms.routing import build_task_graph
+from axioms.routing import TASK_GRAPH_VERSION, build_task_graph, validate_task_graph
 from axioms.store import TaskStore
 
 
@@ -128,8 +130,13 @@ class AxiomsCore:
         self.store.save(record)
         return record.to_dict()
 
-    def execute(self, task_id: str) -> dict:
-        """Run an approved plan locally and return its drafts for final review."""
+    def execute(self, task_id: str, *, parallel: bool = False) -> dict:
+        """Run an approved plan locally and return its drafts for final review.
+
+        Parallel execution is explicitly opt-in and is limited to independent
+        local draft nodes in a persisted task-graph layer.  It never enables an
+        external action, and results and traces are persisted in graph order.
+        """
         payload = self.store.get(task_id)
         if payload is None:
             raise KeyError(task_id)
@@ -137,6 +144,23 @@ class AxiomsCore:
             raise TaskStateError("Only an approved task may be executed.")
 
         record = _record_from_payload(payload)
+        if record.graph_version != TASK_GRAPH_VERSION:
+            raise TaskStateError(
+                "Task graph version is not supported for execution; recreate and reapprove the task."
+            )
+        if record.graph_digest is None:
+            raise TaskStateError(
+                "Task has no persisted graph digest; recreate and reapprove it before execution."
+            )
+        try:
+            graph = validate_task_graph(record.subtasks, version=record.graph_version)
+        except ValueError as error:
+            raise TaskStateError(f"Task graph is invalid; recreate and reapprove it: {error}") from error
+        if graph.digest != record.graph_digest:
+            raise TaskStateError(
+                "Task graph integrity check failed; recreate and reapprove the task before execution."
+            )
+
         record.status = TaskStatus.RUNNING
         record.agent_trace.append(
             AgentStep(kind=StepKind.EXECUTION_STARTED, summary="Approved task execution started.")
@@ -144,21 +168,56 @@ class AxiomsCore:
         self.store.save(record)
         try:
             deliverables: list[Deliverable] = []
-            for subtask in record.subtasks:
+            subtasks_by_node = {subtask.agent.value: subtask for subtask in record.subtasks}
+            layer_count = len(graph.execution_layers)
+            for layer_index, node_ids in enumerate(graph.execution_layers, start=1):
+                layer_subtasks = [subtasks_by_node[node_id] for node_id in node_ids]
+                execution_mode = "parallel local" if parallel and len(layer_subtasks) > 1 else "sequential local"
                 record.agent_trace.append(
                     AgentStep(
-                        kind=StepKind.AGENT_DISPATCHED,
-                        agent=subtask.agent,
-                        summary=f"Dispatched {subtask.agent.value} for: {subtask.title}",
+                        kind=StepKind.EXECUTION_LAYER_STARTED,
+                        summary=(
+                            f"Execution layer {layer_index}/{layer_count} started "
+                            f"({execution_mode}; {len(layer_subtasks)} independent local draft(s))."
+                        ),
                     )
                 )
-                deliverable = _run_local_draft(record.request, subtask)
-                deliverables.append(deliverable)
+                for subtask in layer_subtasks:
+                    record.agent_trace.append(
+                        AgentStep(
+                            kind=StepKind.AGENT_DISPATCHED,
+                            agent=subtask.agent,
+                            summary=f"Dispatched {subtask.agent.value} for: {subtask.title}",
+                        )
+                    )
+
+                if parallel and len(layer_subtasks) > 1:
+                    with ThreadPoolExecutor(
+                        max_workers=len(layer_subtasks), thread_name_prefix="axioms-local"
+                    ) as executor:
+                        drafts = {
+                            subtask.agent.value: executor.submit(_run_local_draft, record.request, subtask)
+                            for subtask in layer_subtasks
+                        }
+                        layer_deliverables = [drafts[subtask.agent.value].result() for subtask in layer_subtasks]
+                else:
+                    layer_deliverables = [
+                        _run_local_draft(record.request, subtask) for subtask in layer_subtasks
+                    ]
+
+                deliverables.extend(layer_deliverables)
+                for subtask, deliverable in zip(layer_subtasks, layer_deliverables, strict=True):
+                    record.agent_trace.append(
+                        AgentStep(
+                            kind=StepKind.DELIVERABLE_CREATED,
+                            agent=subtask.agent,
+                            summary=f"Created review-only deliverable: {deliverable.title}",
+                        )
+                    )
                 record.agent_trace.append(
                     AgentStep(
-                        kind=StepKind.DELIVERABLE_CREATED,
-                        agent=subtask.agent,
-                        summary=f"Created review-only deliverable: {deliverable.title}",
+                        kind=StepKind.EXECUTION_LAYER_COMPLETED,
+                        summary=f"Execution layer {layer_index}/{layer_count} completed in deterministic graph order.",
                     )
                 )
         except (TypeError, ValueError) as error:

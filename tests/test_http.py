@@ -102,6 +102,22 @@ def test_task_lifecycle_requires_approval_then_final_review() -> None:
     assert completed.json()["status"] == "completed"
 
 
+def test_task_lifecycle_accepts_opt_in_parallel_local_execution() -> None:
+    created = client.post("/tasks", json={"goal": "Prepare a lecture and write an announcement"})
+    task_id = created.json()["task_id"]
+    client.post(
+        f"/tasks/{task_id}/approval",
+        json={"decision": "approve", "approved_by": "Dr Aslam", "note": "Proceed locally"},
+    )
+
+    executed = client.post(f"/tasks/{task_id}/execute?parallel=true")
+    assert executed.status_code == 200
+    assert [item["agent"] for item in executed.json()["deliverables"]] == [
+        "lecture_design",
+        "writing_communication",
+    ]
+
+
 def test_task_carries_risk_tier_and_policy_reason() -> None:
     created = client.post("/tasks", json={"goal": "Email a course announcement to the mailing list"})
     body = created.json()

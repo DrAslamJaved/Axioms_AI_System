@@ -45,6 +45,8 @@ class StepKind(StrEnum):
     PLAN_CREATED = "plan_created"
     APPROVAL_RECORDED = "approval_recorded"
     EXECUTION_STARTED = "execution_started"
+    EXECUTION_LAYER_STARTED = "execution_layer_started"
+    EXECUTION_LAYER_COMPLETED = "execution_layer_completed"
     AGENT_DISPATCHED = "agent_dispatched"
     DELIVERABLE_CREATED = "deliverable_created"
     REVIEW_REQUIRED = "review_required"
