@@ -11,6 +11,7 @@ from axioms.agents import (
     specialist_draft,
     writing_draft,
 )
+from axioms.autoeval_agent import AutoEvalRequest, EvaluatedAgent, evaluate_deliverable
 from axioms.dispatch import DispatchJob, DurableDispatchStore
 from axioms.episodic_memory import EpisodicMemoryStore, MemoryDecision, MemoryProposal
 from axioms.models import (
@@ -509,6 +510,63 @@ class AxiomsCore:
     def delete_episodic_memory(self, memory_id: str, deleted_by: str, note: str | None = None) -> dict:
         return self.memory_store.delete(memory_id, deleted_by, note)
 
+    def create_cross_agent_autoeval(self, task_id: str) -> dict:
+        """Add one deterministic, review-only quality report for completed graph drafts.
+
+        This operation is deliberately available only once local execution has
+        finished and before final review. It neither changes the task decision
+        nor alters any evaluated draft; the resulting report is itself held for
+        the same final human approval as every other deliverable.
+        """
+        payload = self.store.get(task_id)
+        if payload is None:
+            raise KeyError(task_id)
+        if TaskStatus(payload["status"]) is not TaskStatus.AWAITING_REVIEW:
+            raise TaskStateError("Cross-agent AutoEval requires completed drafts awaiting final human review.")
+
+        record = _record_from_payload(payload)
+        report_title = _cross_agent_autoeval_title(record)
+        existing = next((item for item in record.deliverables if item.title == report_title), None)
+        if existing is not None:
+            return record.to_dict()
+
+        targets = [item for item in record.deliverables if item.agent is not AgentName.AUTOEVAL]
+        if not targets:
+            raise TaskStateError("Cross-agent AutoEval requires at least one completed specialist draft.")
+
+        reports = tuple(
+            evaluate_deliverable(
+                AutoEvalRequest(
+                    evaluated_agent=_evaluated_agent_for(deliverable.agent),
+                    deliverable_title=deliverable.title,
+                    artifact_text=deliverable.content,
+                    required_elements=_required_markers_for(deliverable.agent),
+                    public_facing=record.request.external_delivery,
+                    declared_sensitive_data=record.risk_tier is RiskTier.HIGH,
+                )
+            )
+            for deliverable in targets
+        )
+        record.deliverables.append(
+            Deliverable(
+                title=report_title,
+                agent=AgentName.AUTOEVAL,
+                content=_cross_agent_autoeval_markdown(reports),
+            )
+        )
+        record.agent_trace.append(
+            AgentStep(
+                kind=StepKind.CROSS_AGENT_AUTOEVAL_CREATED,
+                agent=AgentName.AUTOEVAL,
+                summary=(
+                    f"Created one deterministic cross-agent AutoEval report for {len(reports)} completed "
+                    "specialist draft(s); final human review remains required."
+                ),
+            )
+        )
+        self.store.save(record)
+        return record.to_dict()
+
     def _record_final_review(
         self, payload: dict, decision: ApprovalDecision, note: str | None, reviewer: str | None
     ) -> dict:
@@ -544,6 +602,55 @@ def _run_local_draft(request: TaskRequest, subtask: Subtask) -> Deliverable:
     if subtask.agent in {AgentName.RESEARCH, AgentName.ASSESSMENT, AgentName.CONTENT}:
         return specialist_draft(request, subtask.agent)
     raise ValueError(f"No local draft runner is registered for {subtask.agent.value}.")
+
+
+_CROSS_AGENT_REQUIRED_MARKERS: dict[AgentName, tuple[str, ...]] = {
+    AgentName.LECTURE: ("Teaching context", "Proposed structure", "Instructor review required"),
+    AgentName.WRITING: ("Purpose and audience", "Suggested structure", "Verification checklist"),
+    AgentName.RESEARCH: ("Typed endpoint", "Required human preparation", "Safety boundary"),
+    AgentName.ASSESSMENT: ("Typed endpoint", "Required human preparation", "Safety boundary"),
+    AgentName.CONTENT: ("Typed endpoint", "Required human preparation", "Safety boundary"),
+    AgentName.SOCIAL_MEDIA: ("Proposed review sequence", "Safety boundary"),
+    AgentName.PORTFOLIO: ("Proposed review sequence", "Safety boundary"),
+}
+
+
+def _evaluated_agent_for(agent: AgentName) -> EvaluatedAgent:
+    """Convert only specialist deliverables into the AutoEval public contract."""
+    try:
+        return EvaluatedAgent(agent.value)
+    except ValueError as error:
+        raise TaskStateError(f"No cross-agent AutoEval contract is registered for {agent.value}.") from error
+
+
+def _required_markers_for(agent: AgentName) -> tuple[str, ...]:
+    try:
+        return _CROSS_AGENT_REQUIRED_MARKERS[agent]
+    except KeyError as error:
+        raise TaskStateError(f"No cross-agent AutoEval markers are registered for {agent.value}.") from error
+
+
+def _cross_agent_autoeval_title(record: TaskRecord) -> str:
+    return f"Cross-agent AutoEval review: {record.request.goal}"
+
+
+def _cross_agent_autoeval_markdown(reports: tuple) -> str:
+    """Render an auditable consolidation without asserting factual validation."""
+    average = round(sum(report.quality_signal_percent for report in reports) / len(reports))
+    sections = "\n\n".join(report.to_markdown() for report in reports)
+    return f"""# Cross-agent AutoEval review
+
+## Scope
+- Completed specialist drafts evaluated: {len(reports)}
+- Aggregate quality signal: {average}% (deterministic review signal only)
+- This review did not alter any draft, approve the task, publish, schedule, send, or perform an external action.
+
+## Human decision boundary
+Final human review remains required for every draft and this report. The aggregate signal is not factual validation, originality analysis, accessibility review, legal advice, or permission to release material.
+
+## Per-deliverable reports
+{sections}
+"""
 
 
 def _cancellation_summary(requested_by: str, note: str | None, outcome: str) -> str:
