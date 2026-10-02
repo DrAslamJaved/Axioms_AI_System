@@ -103,6 +103,8 @@ class TaskRecord:
     reviewed_by: str | None = None
     risk_tier: RiskTier = RiskTier.LOW
     policy_reason: str | None = None
+    graph_version: str = "routing.v1"
+    graph_digest: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
