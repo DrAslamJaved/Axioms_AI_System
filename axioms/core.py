@@ -506,6 +506,9 @@ class AxiomsCore:
     def recall_episodic_memory(self, query: str, *, limit: int = 5) -> list[dict]:
         return self.memory_store.search(query, limit=limit)
 
+    def delete_episodic_memory(self, memory_id: str, deleted_by: str, note: str | None = None) -> dict:
+        return self.memory_store.delete(memory_id, deleted_by, note)
+
     def _record_final_review(
         self, payload: dict, decision: ApprovalDecision, note: str | None, reviewer: str | None
     ) -> dict:

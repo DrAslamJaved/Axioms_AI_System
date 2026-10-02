@@ -69,6 +69,7 @@ real tool use and optional LLM synthesis:
 - **SQLite** stores task episodes, a consented episodic-memory ledger, and an
   approved Personal Knowledge Base (PKB). Episodic memory retains only
   owner-approved, non-sensitive task summaries — never draft content by default.
+  An owner can delete a searchable entry; deletion retains only a minimal audit tombstone.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.
@@ -190,6 +191,12 @@ curl -X POST http://127.0.0.1:8000/episodic-memory/proposals/{proposal_id}/decis
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
   -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Retain this reusable planning context"}'
+
+# Delete one searchable memory entry by ID; its content is removed.
+curl -X DELETE http://127.0.0.1:8000/episodic-memory/{memory_id} \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"deleted_by":"Dr Aslam", "note":"No longer needed"}'
 
 # Screen supplied text against a local comparison set; review any flagged overlap.
 curl -X POST http://127.0.0.1:8000/similarity/screen \

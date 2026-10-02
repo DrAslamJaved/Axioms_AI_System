@@ -14,6 +14,7 @@ from axioms.api import (
     FeedbackIn,
     LecturePlanIn,
     MemoryDecisionIn,
+    MemoryDeleteIn,
     PortfolioPackageIn,
     PreferenceProposalIn,
     ProposalDecisionIn,
@@ -49,6 +50,7 @@ from axioms.api import (
     create_writing_draft_docx,
     decide_episodic_memory,
     decide_preference_proposal,
+    delete_episodic_memory,
     discover_arxiv_preprints,
     discover_research_sources,
     discover_semantic_scholar_papers,
@@ -254,6 +256,25 @@ def test_episodic_memory_handlers_require_a_second_approval(tmp_path: Path, monk
     )
     assert decided["decided_by"] == "Dr Aslam"
     assert search_episodic_memory("spectral")[0]["task_id"] == record.task_id
+
+
+def test_episodic_memory_delete_handler_removes_searchable_entry(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    test_core.execute(record.task_id)
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    proposal = propose_episodic_memory(record.task_id)
+    decide_episodic_memory(proposal["proposal_id"], MemoryDecisionIn(decision="approve", approved_by="Dr Aslam"), principal=None)
+    entry = search_episodic_memory("spectral")[0]
+
+    deleted = delete_episodic_memory(
+        entry["memory_id"], MemoryDeleteIn(deleted_by="Dr Aslam"), principal=None
+    )
+
+    assert deleted["memory_id"] == entry["memory_id"]
+    assert search_episodic_memory("spectral") == []
 
 
 def test_dispatch_handler_queues_only_an_approved_task(tmp_path: Path, monkeypatch) -> None:

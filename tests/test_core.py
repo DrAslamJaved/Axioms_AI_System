@@ -348,6 +348,20 @@ def test_completed_low_risk_task_enters_memory_only_after_a_second_approval(tmp_
     assert core.recall_episodic_memory("spectral")[0]["task_id"] == record.task_id
 
 
+def test_owner_can_delete_a_consented_episodic_memory_entry(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.execute(record.task_id)
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    proposal = core.propose_episodic_memory(record.task_id)
+    core.decide_episodic_memory(proposal["proposal_id"], MemoryDecision.APPROVE, "Dr Aslam")
+    entry = core.recall_episodic_memory("spectral")[0]
+    deleted = core.delete_episodic_memory(entry["memory_id"], "Dr Aslam", "No longer needed")
+    assert deleted["memory_id"] == entry["memory_id"]
+    assert core.recall_episodic_memory("spectral") == []
+
+
 def test_high_risk_task_is_never_eligible_for_episodic_memory(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Prepare a lecture using student grades"))
