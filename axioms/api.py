@@ -407,6 +407,11 @@ class MemoryDecisionIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class MemoryDeleteIn(BaseModel):
+    deleted_by: str = Field(min_length=2, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class ComparisonTextIn(BaseModel):
     reference_id: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=50000)
@@ -551,6 +556,22 @@ def search_episodic_memory(
 ) -> list[dict]:
     try:
         return core.recall_episodic_memory(query, limit=limit)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.delete("/episodic-memory/{memory_id}")
+def delete_episodic_memory(
+    memory_id: str,
+    payload: MemoryDeleteIn,
+    _auth: None = Depends(require_api_key),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    """Delete one searchable episodic-memory entry by its authenticated owner."""
+    try:
+        return core.delete_episodic_memory(memory_id, principal or payload.deleted_by, payload.note)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Episodic-memory entry not found") from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
