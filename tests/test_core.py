@@ -1,5 +1,5 @@
 from pathlib import Path
-from threading import Barrier, Event, Thread, current_thread
+from threading import Barrier, Event, Lock, Thread, current_thread
 
 import pytest
 
@@ -149,6 +149,49 @@ def test_parallel_execution_is_opt_in_and_keeps_deterministic_graph_order(
     kinds = [step["kind"] for step in executed["agent_trace"]]
     assert kinds.count(StepKind.EXECUTION_LAYER_STARTED) == 1
     assert kinds.count(StepKind.EXECUTION_LAYER_COMPLETED) == 1
+
+
+def test_parallel_execution_obeys_the_configured_local_worker_cap(tmp_path: Path, monkeypatch) -> None:
+    core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"), max_parallel_workers=2)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture, write a report, and build a portfolio"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    original = core_module._run_local_draft
+    two_workers_started = Event()
+    release_workers = Event()
+    lock = Lock()
+    active_workers = 0
+    max_active_workers = 0
+
+    def observe_concurrency(request, subtask):
+        nonlocal active_workers, max_active_workers
+        with lock:
+            active_workers += 1
+            max_active_workers = max(max_active_workers, active_workers)
+            if active_workers == 2:
+                two_workers_started.set()
+        assert release_workers.wait(timeout=2)
+        try:
+            return original(request, subtask)
+        finally:
+            with lock:
+                active_workers -= 1
+
+    monkeypatch.setattr(core_module, "_run_local_draft", observe_concurrency)
+    result: dict = {}
+    thread = Thread(target=lambda: result.update(core.execute(record.task_id, parallel=True)))
+    thread.start()
+    assert two_workers_started.wait(timeout=2)
+    release_workers.set()
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert max_active_workers == 2
+    assert result["status"] == TaskStatus.AWAITING_REVIEW.value
+
+
+def test_parallel_worker_limit_rejects_invalid_configuration(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="between 1 and 4"):
+        AxiomsCore(TaskStore(tmp_path / "test.sqlite3"), max_parallel_workers=5)
 
 
 def test_execution_rejects_a_task_with_a_changed_graph_digest(tmp_path: Path) -> None:
