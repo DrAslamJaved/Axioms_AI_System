@@ -50,6 +50,7 @@ class StepKind(StrEnum):
     REVIEW_REQUIRED = "review_required"
     REVIEW_RECORDED = "review_recorded"
     EXECUTION_FAILED = "execution_failed"
+    DISPATCH_QUEUED = "dispatch_queued"
 
 
 @dataclass(slots=True)
