@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from axioms import core as core_module
 from axioms.core import AxiomsCore, BlockedApprovalError, TaskStateError
 from axioms.episodic_memory import MemoryDecision
 from axioms.models import AgentName, ApprovalDecision, StepKind, TaskRequest, TaskStatus
@@ -66,6 +67,44 @@ def test_only_approved_tasks_can_be_durably_queued_with_an_idempotent_trace(tmp_
     task = core.store.get(record.task_id)
     assert task is not None
     assert [step["kind"] for step in task["agent_trace"]].count(StepKind.DISPATCH_QUEUED) == 1
+
+
+def test_local_worker_executes_one_claimed_approved_job_then_requires_final_review(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.enqueue_approved_task(record.task_id, idempotency_key="worker-success-001")
+    result = core.run_one_dispatched_task("local-worker")
+    assert result is not None
+    assert result["job"]["status"] == "succeeded"
+    assert result["task"]["status"] == TaskStatus.AWAITING_REVIEW.value
+    assert any(step["kind"] == StepKind.DISPATCH_EXECUTION_STARTED for step in result["task"]["agent_trace"])
+
+
+def test_local_worker_retries_clean_local_failure_within_job_budget(tmp_path: Path, monkeypatch) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.enqueue_approved_task(record.task_id, idempotency_key="worker-retry-001", max_attempts=2)
+    original = core_module._run_local_draft
+    calls = [0]
+
+    def fail_once(request, subtask):
+        calls[0] += 1
+        if calls[0] == 1:
+            raise ValueError("temporary local failure")
+        return original(request, subtask)
+
+    monkeypatch.setattr(core_module, "_run_local_draft", fail_once)
+    failed = core.run_one_dispatched_task("local-worker")
+    assert failed is not None
+    assert failed["job"]["status"] == "queued"
+    assert failed["task"]["status"] == TaskStatus.APPROVED.value
+    assert any(step["kind"] == StepKind.DISPATCH_RETRY_SCHEDULED for step in failed["task"]["agent_trace"])
+    succeeded = core.run_one_dispatched_task("local-worker")
+    assert succeeded is not None
+    assert succeeded["job"]["status"] == "succeeded"
+    assert succeeded["job"]["attempts"] == 2
 
 
 def test_mixed_goal_dispatches_every_planned_specialist(tmp_path: Path) -> None:

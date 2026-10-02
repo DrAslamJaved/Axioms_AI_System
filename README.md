@@ -42,7 +42,8 @@ real tool use and optional LLM synthesis:
   signals only, not evidence of quality, publication status, or claim validity.
 - **Durable local dispatch** queues only approved local tasks in SQLite with an
   idempotency key, atomic worker claim, bounded retry, and dead-letter state.
-  It ships no autonomous worker and cannot perform external actions.
+  A manually invoked local worker runs deterministic drafts only; it cannot
+  perform external actions.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -190,7 +191,7 @@ Use `GET /system/readiness` for a full component report.
 | Research discovery (read-only) | `POST /research/discover` | — |
 | arXiv preprint discovery (read-only) | `POST /research/discover/arxiv` | — |
 | Semantic Scholar discovery (read-only) | `POST /research/discover/semantic-scholar` | — |
-| Durable local dispatch | `POST /tasks/{task_id}/dispatch`; `POST /dispatch/jobs/claim`; `POST /dispatch/jobs/{job_id}/finish` | — |
+| Durable local dispatch | `POST /tasks/{task_id}/dispatch`; `POST /dispatch/run-one` | `POST /dispatch/jobs/claim`; `POST /dispatch/jobs/{job_id}/finish` |
 | Similarity screening (local review signal) | `POST /similarity/screen` | — |
 | Assessment Design | `POST /assessment-blueprints`; `POST /assessment-blueprints/agentic` | student + instructor DOCX; instructor-only review |
 | Content Creation | `POST /content-packages`; `POST /content-packages/agentic` | `POST /content-packages/docx`; internal editorial review |

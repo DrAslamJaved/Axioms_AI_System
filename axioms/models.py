@@ -51,6 +51,8 @@ class StepKind(StrEnum):
     REVIEW_RECORDED = "review_recorded"
     EXECUTION_FAILED = "execution_failed"
     DISPATCH_QUEUED = "dispatch_queued"
+    DISPATCH_EXECUTION_STARTED = "dispatch_execution_started"
+    DISPATCH_RETRY_SCHEDULED = "dispatch_retry_scheduled"
 
 
 @dataclass(slots=True)
