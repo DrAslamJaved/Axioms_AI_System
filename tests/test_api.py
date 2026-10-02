@@ -20,6 +20,7 @@ from axioms.api import (
     WritingDraftIn,
     create_agentic_assessment_blueprint,
     create_agentic_content_review,
+    create_agentic_social_media_review,
     create_assessment_blueprint,
     create_assessment_instructor_docx,
     create_assessment_student_docx,
@@ -287,6 +288,15 @@ def test_social_media_handler_returns_drafts_without_external_action() -> None:
     assert body["approval_required"]
     assert body["external_action_blocked"]
     assert len(body["platform_drafts"]) == 2
+
+
+def test_agentic_social_handler_safely_degrades_when_llm_is_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "disabled")
+    body = create_agentic_social_media_review(social_media_payload())
+    assert not body["generation_enabled"]
+    assert body["editorial_review"] is None
+    assert body["human_approval_required"]
+    assert body["external_action_blocked"]
 
 
 def test_social_media_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
