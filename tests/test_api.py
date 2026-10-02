@@ -19,6 +19,7 @@ from axioms.api import (
     SocialMediaPackageIn,
     WritingDraftIn,
     create_agentic_assessment_blueprint,
+    create_agentic_content_review,
     create_assessment_blueprint,
     create_assessment_instructor_docx,
     create_assessment_student_docx,
@@ -253,6 +254,15 @@ def test_content_handler_returns_a_review_first_package() -> None:
     body = create_content_package(content_payload())
     assert body["publication_approval_required"]
     assert sum(item["minutes"] for item in body["segments"]) == 15
+
+
+def test_agentic_content_handler_safely_degrades_when_llm_is_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "disabled")
+    body = create_agentic_content_review(content_payload())
+    assert not body["generation_enabled"]
+    assert body["editorial_review"] is None
+    assert body["editorial_approval_required"]
+    assert body["publication_blocked"]
 
 
 def test_content_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
