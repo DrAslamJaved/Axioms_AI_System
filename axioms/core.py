@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 from axioms.agents import (
@@ -29,6 +30,9 @@ from axioms.policy import assess_request
 from axioms.routing import TASK_GRAPH_VERSION, build_task_graph, validate_task_graph
 from axioms.store import TaskStore
 
+DEFAULT_MAX_PARALLEL_WORKERS = 2
+MAX_PARALLEL_WORKERS = 4
+
 
 class BlockedApprovalError(RuntimeError):
     """Raised when a HIGH-risk blocking task is approved without an explicit override."""
@@ -53,11 +57,13 @@ class AxiomsCore:
         kb_store: PersonalKnowledgeStore | None = None,
         memory_store: EpisodicMemoryStore | None = None,
         dispatch_store: DurableDispatchStore | None = None,
+        max_parallel_workers: int | None = None,
     ) -> None:
         self.store = store or TaskStore()
         self.kb_store = kb_store or PersonalKnowledgeStore(self.store.path)
         self.memory_store = memory_store or EpisodicMemoryStore(self.store.path)
         self.dispatch_store = dispatch_store or DurableDispatchStore(self.store.path)
+        self.max_parallel_workers = _parallel_worker_limit(max_parallel_workers)
 
     def create_task(self, request: TaskRequest) -> TaskRecord:
         graph = build_task_graph(request)
@@ -288,7 +294,12 @@ class AxiomsCore:
                     return cancelled.to_dict()
                 record = _record_from_payload(self.store.get(task_id) or record.to_dict())
                 layer_subtasks = [subtasks_by_node[node_id] for node_id in node_ids]
-                execution_mode = "parallel local" if parallel and len(layer_subtasks) > 1 else "sequential local"
+                worker_count = min(self.max_parallel_workers, len(layer_subtasks))
+                execution_mode = (
+                    f"parallel local (bounded to {worker_count} worker(s))"
+                    if parallel and len(layer_subtasks) > 1
+                    else "sequential local"
+                )
                 record.agent_trace.append(
                     AgentStep(
                         kind=StepKind.EXECUTION_LAYER_STARTED,
@@ -309,7 +320,7 @@ class AxiomsCore:
 
                 if parallel and len(layer_subtasks) > 1:
                     with ThreadPoolExecutor(
-                        max_workers=len(layer_subtasks), thread_name_prefix="axioms-local"
+                        max_workers=worker_count, thread_name_prefix="axioms-local"
                     ) as executor:
                         drafts = {
                             subtask.agent.value: executor.submit(_run_local_draft, record.request, subtask)
@@ -542,6 +553,21 @@ def _recovery_summary(recovered_by: str, note: str | None, outcome: str) -> str:
     """Keep a human recovery attestation visible in the persisted task trace."""
     note_suffix = f" Note: {note.strip()}" if note and note.strip() else ""
     return f"Interrupted execution recovery confirmed by {recovered_by}. {outcome}{note_suffix}"
+
+
+def _parallel_worker_limit(explicit: int | None) -> int:
+    """Read a deliberately small local concurrency limit and fail closed on bad config."""
+    if explicit is None:
+        raw = os.getenv("AXIOMS_MAX_PARALLEL_WORKERS", str(DEFAULT_MAX_PARALLEL_WORKERS))
+        try:
+            limit = int(raw)
+        except ValueError as error:
+            raise ValueError("AXIOMS_MAX_PARALLEL_WORKERS must be an integer from 1 to 4.") from error
+    else:
+        limit = explicit
+    if not 1 <= limit <= MAX_PARALLEL_WORKERS:
+        raise ValueError("max_parallel_workers must be between 1 and 4.")
+    return limit
 
 
 def _record_from_payload(payload: dict) -> TaskRecord:

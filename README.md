@@ -48,7 +48,8 @@ real tool use and optional LLM synthesis:
   to every task. Dependencies are validated for missing nodes and cycles before
   approval. `parallel=true` may run only independent local draft nodes in a
   recorded layer; it preserves deterministic result ordering, remains opt-in,
-  and never enables external actions. Default execution and the durable worker
+  and never enables external actions. It uses a conservative configurable cap
+  of 1–4 local workers (default 2); default execution and the durable worker
   remain sequential.
 - **Cooperative local cancellation** lets a named human cancel an approved task
   immediately, or request a running task to stop at its next persisted graph
@@ -124,6 +125,7 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | `AXIOMS_API_KEY` | Single shared API secret (legacy mode) | unset (open-dev) |
 | `AXIOMS_API_KEYS` | JSON object mapping principal names to secrets, e.g. `{"Dr Aslam": "key1"}` | unset |
 | `AXIOMS_APPROVAL_MODE` | `strict` (all drafts gated) or `risk_based` (low-risk planned directly) | `strict` |
+| `AXIOMS_MAX_PARALLEL_WORKERS` | Local cap for explicit `parallel=true` drafting (1–4) | `2` |
 | `AXIOMS_LLM_PROVIDER` | `disabled`, `anthropic`, or `openai` | `disabled` |
 | `AXIOMS_LLM_MODEL` | Model override (e.g. `claude-3-5-sonnet-latest`) | provider default |
 | `ANTHROPIC_API_KEY` | Required when provider is `anthropic` | — |
