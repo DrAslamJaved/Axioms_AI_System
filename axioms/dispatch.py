@@ -152,7 +152,15 @@ class DurableDispatchStore:
             )
         return self.get(job.job_id)
 
-    def finish(self, job_id: str, *, worker_id: str, succeeded: bool, error: str | None = None) -> DispatchJob:
+    def finish(
+        self,
+        job_id: str,
+        *,
+        worker_id: str,
+        succeeded: bool,
+        error: str | None = None,
+        retryable: bool = True,
+    ) -> DispatchJob:
         worker = worker_id.strip()
         if not worker:
             raise ValueError("A worker ID is required.")
@@ -169,7 +177,11 @@ class DurableDispatchStore:
                 status = DispatchStatus.SUCCEEDED
                 last_error = None
             else:
-                status = DispatchStatus.QUEUED if job.attempts < job.max_attempts else DispatchStatus.DEAD_LETTER
+                status = (
+                    DispatchStatus.QUEUED
+                    if retryable and job.attempts < job.max_attempts
+                    else DispatchStatus.DEAD_LETTER
+                )
                 last_error = (error or "Worker reported a failed local execution.").strip()
             now = _now()
             connection.execute(
