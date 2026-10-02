@@ -6,6 +6,7 @@ from axioms import api
 from axioms.api import (
     AssessmentBlueprintIn,
     AutoEvalReportIn,
+    CancellationIn,
     ContentPackageIn,
     DispatchIn,
     DispatchRunIn,
@@ -20,6 +21,7 @@ from axioms.api import (
     SimilarityScreenIn,
     SocialMediaPackageIn,
     WritingDraftIn,
+    cancel_task,
     create_agentic_assessment_blueprint,
     create_agentic_content_review,
     create_agentic_portfolio_review,
@@ -58,7 +60,7 @@ from axioms.api import (
     system_readiness,
 )
 from axioms.core import AxiomsCore
-from axioms.models import ApprovalDecision, TaskRequest
+from axioms.models import ApprovalDecision, TaskRequest, TaskStatus
 from axioms.store import TaskStore
 from axioms.tools import ArxivClient, SemanticScholarClient, TavilyClient
 
@@ -81,6 +83,21 @@ def test_lecture_plan_handler_returns_duration_accurate_plan() -> None:
     body = create_lecture_plan(lecture_payload())
     assert sum(section["minutes"] for section in body["sections"]) == 75
     assert body["request"]["topic"] == "Spectral Graph Theory"
+
+
+def test_cancel_handler_stops_an_approved_task(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+
+    cancelled = cancel_task(
+        record.task_id,
+        CancellationIn(requested_by="Dr Aslam", note="Scope changed"),
+        principal=None,
+    )
+
+    assert cancelled["status"] == TaskStatus.CANCELLED.value
 
 
 def test_lecture_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:

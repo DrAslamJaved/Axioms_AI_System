@@ -1,5 +1,5 @@
 from pathlib import Path
-from threading import Barrier, current_thread
+from threading import Barrier, Event, Thread, current_thread
 
 import pytest
 
@@ -162,6 +162,67 @@ def test_execution_rejects_a_task_with_a_changed_graph_digest(tmp_path: Path) ->
 
     with pytest.raises(TaskStateError, match="integrity check failed"):
         core.execute(record.task_id)
+
+
+def test_approved_task_can_be_cancelled_before_execution(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+
+    cancelled = core.request_cancellation(record.task_id, "Dr Aslam", "Scope changed")
+
+    assert cancelled["status"] == TaskStatus.CANCELLED.value
+    assert cancelled["deliverables"] == []
+    assert cancelled["agent_trace"][-1]["kind"] == StepKind.CANCELLATION_REQUESTED.value
+    with pytest.raises(TaskStateError, match="Only an approved task"):
+        core.execute(record.task_id)
+
+
+def test_cancelled_queued_task_is_not_run_by_the_local_worker(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.enqueue_approved_task(record.task_id, idempotency_key="cancelled-dispatch-001")
+    core.request_cancellation(record.task_id, "Dr Aslam")
+
+    result = core.run_one_dispatched_task("local-worker")
+
+    assert result is not None
+    assert result["task"]["status"] == TaskStatus.CANCELLED.value
+    assert result["job"]["status"] == "dead_letter"
+
+
+def test_running_task_stops_at_checkpoint_and_discards_partial_drafts(tmp_path: Path, monkeypatch) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Research literature and prepare an assessment"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    original = core_module._run_local_draft
+    first_layer_started = Event()
+    release_first_layer = Event()
+    result: dict = {}
+
+    def pause_research(request, subtask):
+        if subtask.agent is AgentName.RESEARCH:
+            first_layer_started.set()
+            assert release_first_layer.wait(timeout=2)
+        return original(request, subtask)
+
+    def execute() -> None:
+        result.update(core.execute(record.task_id))
+
+    monkeypatch.setattr(core_module, "_run_local_draft", pause_research)
+    thread = Thread(target=execute)
+    thread.start()
+    assert first_layer_started.wait(timeout=2)
+    pending = core.request_cancellation(record.task_id, "Dr Aslam", "Stop after this safe checkpoint")
+    assert pending["status"] == TaskStatus.CANCELLATION_REQUESTED.value
+    release_first_layer.set()
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert result["status"] == TaskStatus.CANCELLED.value
+    assert result["deliverables"] == []
+    assert result["agent_trace"][-1]["kind"] == StepKind.EXECUTION_CANCELLED.value
 
 
 def test_specialist_handoffs_are_only_created_during_execution(tmp_path: Path) -> None:

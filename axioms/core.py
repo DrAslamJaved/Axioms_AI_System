@@ -96,7 +96,14 @@ class AxiomsCore:
         if payload is None:
             raise KeyError(task_id)
         current_status = TaskStatus(payload["status"])
-        if current_status in {TaskStatus.REJECTED, TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.RUNNING}:
+        if current_status in {
+            TaskStatus.REJECTED,
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+            TaskStatus.RUNNING,
+            TaskStatus.CANCELLATION_REQUESTED,
+            TaskStatus.CANCELLED,
+        }:
             raise TaskStateError(f"Task {task_id} cannot be decided while it is {current_status.value}.")
         if current_status is TaskStatus.AWAITING_REVIEW:
             return self._record_final_review(payload, decision, note, approved_by)
@@ -129,6 +136,50 @@ class AxiomsCore:
         )
         self.store.save(record)
         return record.to_dict()
+
+    def request_cancellation(self, task_id: str, requested_by: str, note: str | None = None) -> dict:
+        """Request cooperative cancellation before or between local graph layers.
+
+        A task that has not started is cancelled immediately. A running task is
+        marked for cancellation and is stopped at the next persisted layer
+        checkpoint; partial drafts are deliberately never retained.
+        """
+        requester = requested_by.strip()
+        if not requester:
+            raise ValueError("A cancellation requester is required.")
+        payload = self.store.get(task_id)
+        if payload is None:
+            raise KeyError(task_id)
+        status = TaskStatus(payload["status"])
+        if status in {TaskStatus.CANCELLATION_REQUESTED, TaskStatus.CANCELLED}:
+            return payload
+        if status is TaskStatus.APPROVED:
+            record = _record_from_payload(payload)
+            record.status = TaskStatus.CANCELLED
+            record.agent_trace.append(
+                AgentStep(
+                    kind=StepKind.CANCELLATION_REQUESTED,
+                    summary=_cancellation_summary(requester, note, "Cancelled approved task before execution."),
+                )
+            )
+            if not self.store.save_if_status(record, TaskStatus.APPROVED.value):
+                return self.request_cancellation(task_id, requester, note)
+            return record.to_dict()
+        if status is TaskStatus.RUNNING:
+            record = _record_from_payload(payload)
+            record.status = TaskStatus.CANCELLATION_REQUESTED
+            record.agent_trace.append(
+                AgentStep(
+                    kind=StepKind.CANCELLATION_REQUESTED,
+                    summary=_cancellation_summary(
+                        requester, note, "Cancellation will stop execution at the next graph-layer checkpoint."
+                    ),
+                )
+            )
+            if not self.store.save_if_status(record, TaskStatus.RUNNING.value):
+                return self.request_cancellation(task_id, requester, note)
+            return record.to_dict()
+        raise TaskStateError(f"Task {task_id} cannot be cancelled while it is {status.value}.")
 
     def execute(self, task_id: str, *, parallel: bool = False) -> dict:
         """Run an approved plan locally and return its drafts for final review.
@@ -171,6 +222,9 @@ class AxiomsCore:
             subtasks_by_node = {subtask.agent.value: subtask for subtask in record.subtasks}
             layer_count = len(graph.execution_layers)
             for layer_index, node_ids in enumerate(graph.execution_layers, start=1):
+                if cancelled := self._cancel_at_checkpoint(task_id):
+                    return cancelled.to_dict()
+                record = _record_from_payload(self.store.get(task_id) or record.to_dict())
                 layer_subtasks = [subtasks_by_node[node_id] for node_id in node_ids]
                 execution_mode = "parallel local" if parallel and len(layer_subtasks) > 1 else "sequential local"
                 record.agent_trace.append(
@@ -220,12 +274,20 @@ class AxiomsCore:
                         summary=f"Execution layer {layer_index}/{layer_count} completed in deterministic graph order.",
                     )
                 )
+                if not self.store.save_if_status(record, TaskStatus.RUNNING.value):
+                    cancelled = self._cancel_at_checkpoint(task_id)
+                    if cancelled is not None:
+                        return cancelled.to_dict()
+                    raise TaskStateError("Task execution state changed unexpectedly at a graph-layer checkpoint.")
         except (TypeError, ValueError) as error:
             record.status = TaskStatus.FAILED
             record.agent_trace.append(AgentStep(kind=StepKind.EXECUTION_FAILED, summary=str(error)))
             self.store.save(record)
             raise
 
+        if cancelled := self._cancel_at_checkpoint(task_id):
+            return cancelled.to_dict()
+        record = _record_from_payload(self.store.get(task_id) or record.to_dict())
         record.deliverables.extend(deliverables)
         record.status = TaskStatus.AWAITING_REVIEW
         record.agent_trace.append(
@@ -234,8 +296,30 @@ class AxiomsCore:
                 summary="All drafts are ready for final human review; no external action was performed.",
             )
         )
-        self.store.save(record)
+        if not self.store.save_if_status(record, TaskStatus.RUNNING.value):
+            cancelled = self._cancel_at_checkpoint(task_id)
+            if cancelled is not None:
+                return cancelled.to_dict()
+            raise TaskStateError("Task execution state changed unexpectedly before final review.")
         return record.to_dict()
+
+    def _cancel_at_checkpoint(self, task_id: str) -> TaskRecord | None:
+        """Convert a pending cancellation into a final, draft-free task state."""
+        payload = self.store.get(task_id)
+        if payload is None or TaskStatus(payload["status"]) is not TaskStatus.CANCELLATION_REQUESTED:
+            return None
+        record = _record_from_payload(payload)
+        record.status = TaskStatus.CANCELLED
+        record.deliverables = []
+        record.agent_trace.append(
+            AgentStep(
+                kind=StepKind.EXECUTION_CANCELLED,
+                summary="Execution stopped at a graph-layer checkpoint; no partial drafts were retained.",
+            )
+        )
+        if self.store.save_if_status(record, TaskStatus.CANCELLATION_REQUESTED.value):
+            return record
+        return self._cancel_at_checkpoint(task_id)
 
     def run_one_dispatched_task(self, worker_id: str) -> dict | None:
         """Claim and run one approved local job; no external action is available to the worker."""
@@ -384,6 +468,12 @@ def _run_local_draft(request: TaskRequest, subtask: Subtask) -> Deliverable:
     if subtask.agent in {AgentName.RESEARCH, AgentName.ASSESSMENT, AgentName.CONTENT}:
         return specialist_draft(request, subtask.agent)
     raise ValueError(f"No local draft runner is registered for {subtask.agent.value}.")
+
+
+def _cancellation_summary(requested_by: str, note: str | None, outcome: str) -> str:
+    """Keep the human cancellation decision legible in the persisted audit trace."""
+    note_suffix = f" Note: {note.strip()}" if note and note.strip() else ""
+    return f"Cancellation requested by {requested_by}. {outcome}{note_suffix}"
 
 
 def _record_from_payload(payload: dict) -> TaskRecord:
