@@ -74,13 +74,22 @@ from axioms.social_media_agent import (
 )
 from axioms.social_media_agent import export_docx as export_social_media_docx
 from axioms.social_media_agent_ai import run_agentic_social_media_review
-from axioms.tools import ArxivClient, ArxivError, CrossrefClient, TavilyClient, TavilyError
+from axioms.tools import (
+    ArxivClient,
+    ArxivError,
+    CrossrefClient,
+    SemanticScholarClient,
+    SemanticScholarError,
+    TavilyClient,
+    TavilyError,
+)
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
 app = FastAPI(title="Axioms AI System", version="0.2.0")
 core = AxiomsCore()
 _ARXIV_CLIENT = ArxivClient()
+_SEMANTIC_SCHOLAR_CLIENTS: dict[str, SemanticScholarClient] = {}
 
 DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -96,6 +105,16 @@ def _tavily_client() -> TavilyClient:
 def _arxiv_client() -> ArxivClient:
     """Keep the small in-process arXiv cache and rate gate across API requests."""
     return _ARXIV_CLIENT
+
+
+def _semantic_scholar_client() -> SemanticScholarClient:
+    """Reuse a client per configured key so cache and rate limits survive API requests."""
+    api_key = (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip()
+    client = _SEMANTIC_SCHOLAR_CLIENTS.get(api_key)
+    if client is None:
+        client = SemanticScholarClient(api_key)
+        _SEMANTIC_SCHOLAR_CLIENTS[api_key] = client
+    return client
 
 
 def _docx_response(write: Callable[[Path], None], filename: str, background: BackgroundTasks) -> FileResponse:
@@ -575,6 +594,17 @@ def discover_arxiv_preprints(payload: ResearchDiscoveryIn, _auth: None = Depends
     try:
         return _arxiv_client().discover(payload.query, max_results=payload.max_results).to_dict()
     except ArxivError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/research/discover/semantic-scholar")
+def discover_semantic_scholar_papers(
+    payload: ResearchDiscoveryIn, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Return cached, rate-limited bibliographic candidates for later independent verification."""
+    try:
+        return _semantic_scholar_client().discover(payload.query, max_results=payload.max_results).to_dict()
+    except SemanticScholarError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
 
