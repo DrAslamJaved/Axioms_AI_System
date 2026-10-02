@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks
 
+from axioms import api
 from axioms.api import (
     AssessmentBlueprintIn,
     AutoEvalReportIn,
@@ -12,6 +13,7 @@ from axioms.api import (
     PreferenceProposalIn,
     ProposalDecisionIn,
     ResearchBriefIn,
+    ResearchDiscoveryIn,
     SocialMediaPackageIn,
     WritingDraftIn,
     create_assessment_blueprint,
@@ -34,10 +36,12 @@ from axioms.api import (
     create_writing_draft,
     create_writing_draft_docx,
     decide_preference_proposal,
+    discover_research_sources,
     list_agents,
     list_personal_kb_entries,
     system_readiness,
 )
+from axioms.tools import TavilyClient
 
 
 def lecture_payload() -> LecturePlanIn:
@@ -120,6 +124,25 @@ def research_payload() -> ResearchBriefIn:
 def test_research_brief_handler_exposes_verification_state() -> None:
     body = create_research_brief(research_payload())
     assert body["source_audit"][0]["synthesis_eligible"]
+
+
+def test_research_discovery_handler_returns_unverified_candidates(monkeypatch) -> None:
+    def fetch(url: str, payload: dict) -> dict:
+        assert payload["query"] == "fuzzy similarity DTI literature"
+        return {
+            "results": [
+                {
+                    "title": "Candidate source",
+                    "url": "https://example.org/candidate",
+                    "content": "Search excerpt",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(api, "_tavily_client", lambda: TavilyClient("test-key", fetch=fetch))
+    body = discover_research_sources(ResearchDiscoveryIn(query="fuzzy similarity DTI literature"))
+    assert body["sources"][0]["title"] == "Candidate source"
+    assert "unverified candidates" in body["verification_boundary"]
 
 
 def test_research_export_handlers_return_docx_and_bibtex(tmp_path: Path, monkeypatch) -> None:
