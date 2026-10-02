@@ -9,6 +9,7 @@ from axioms.api import (
     ContentPackageIn,
     FeedbackIn,
     LecturePlanIn,
+    MemoryDecisionIn,
     PortfolioPackageIn,
     PreferenceProposalIn,
     ProposalDecisionIn,
@@ -35,12 +36,18 @@ from axioms.api import (
     create_social_media_package_docx,
     create_writing_draft,
     create_writing_draft_docx,
+    decide_episodic_memory,
     decide_preference_proposal,
     discover_research_sources,
     list_agents,
     list_personal_kb_entries,
+    propose_episodic_memory,
+    search_episodic_memory,
     system_readiness,
 )
+from axioms.core import AxiomsCore
+from axioms.models import ApprovalDecision, TaskRequest
+from axioms.store import TaskStore
 from axioms.tools import TavilyClient
 
 
@@ -143,6 +150,25 @@ def test_research_discovery_handler_returns_unverified_candidates(monkeypatch) -
     body = discover_research_sources(ResearchDiscoveryIn(query="fuzzy similarity DTI literature"))
     assert body["sources"][0]["title"] == "Candidate source"
     assert "unverified candidates" in body["verification_boundary"]
+
+
+def test_episodic_memory_handlers_require_a_second_approval(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    test_core.execute(record.task_id)
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+
+    proposal = propose_episodic_memory(record.task_id)
+    assert search_episodic_memory("spectral") == []
+    decided = decide_episodic_memory(
+        proposal["proposal_id"],
+        MemoryDecisionIn(decision="approve", approved_by="Dr Aslam"),
+        principal=None,
+    )
+    assert decided["decided_by"] == "Dr Aslam"
+    assert search_episodic_memory("spectral")[0]["task_id"] == record.task_id
 
 
 def test_research_export_handlers_return_docx_and_bibtex(tmp_path: Path, monkeypatch) -> None:

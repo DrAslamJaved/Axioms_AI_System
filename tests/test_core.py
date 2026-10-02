@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from axioms.core import AxiomsCore, BlockedApprovalError, TaskStateError
+from axioms.episodic_memory import MemoryDecision
 from axioms.models import AgentName, ApprovalDecision, StepKind, TaskRequest, TaskStatus
 from axioms.store import TaskStore
 
@@ -84,3 +85,31 @@ def test_high_risk_task_remains_blocked_without_explicit_override(tmp_path: Path
     record = core.create_task(TaskRequest(goal="Export student grades for the registrar"))
     with pytest.raises(BlockedApprovalError):
         core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+
+
+def test_completed_low_risk_task_enters_memory_only_after_a_second_approval(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.execute(record.task_id)
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+
+    proposal = core.propose_episodic_memory(record.task_id)
+    assert core.recall_episodic_memory("spectral") == []
+    core.decide_episodic_memory(proposal["proposal_id"], MemoryDecision.APPROVE, "Dr Aslam")
+    assert core.recall_episodic_memory("spectral")[0]["task_id"] == record.task_id
+
+
+def test_high_risk_task_is_never_eligible_for_episodic_memory(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture using student grades"))
+    core.decide(
+        record.task_id,
+        ApprovalDecision.APPROVE,
+        approved_by="Dr Aslam",
+        override_blocking=True,
+    )
+    core.execute(record.task_id)
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    with pytest.raises(TaskStateError, match="never eligible"):
+        core.propose_episodic_memory(record.task_id)

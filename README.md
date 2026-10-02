@@ -26,7 +26,9 @@ real tool use and optional LLM synthesis:
 - **LLM provider seam** supporting Anthropic, OpenAI, or disabled (the safe
   default). The system degrades gracefully with no LLM configured — all
   deterministic agents work without one.
-- **SQLite** stores task episodes and an approved Personal Knowledge Base (PKB).
+- **SQLite** stores task episodes, a consented episodic-memory ledger, and an
+  approved Personal Knowledge Base (PKB). Episodic memory retains only
+  owner-approved, non-sensitive task summaries — never draft content by default.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.
@@ -48,7 +50,7 @@ flowchart TD
   L --> A["Final human review"]
   AE --> A
   A --> D["Approved local delivery"]
-  C <--> M["SQLite episode + PKB store"]
+  C <--> M["SQLite episodes + consented memory + PKB"]
   C <--> Auth["API-key authentication"]
 ```
 
@@ -119,6 +121,16 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
   -H "X-API-Key: your-secret" \
   -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Final review complete"}'
 
+# Propose the completed non-sensitive episode for memory; a second decision is required.
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/memory-proposal \
+  -H "X-API-Key: your-secret"
+
+# Approve the memory proposal, then retrieve approved episodes by keyword.
+curl -X POST http://127.0.0.1:8000/episodic-memory/proposals/{proposal_id}/decision \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Retain this reusable planning context"}'
+
 # Run the agentic research agent (works with or without an LLM configured)
 curl -X POST http://127.0.0.1:8000/research-briefs/agentic \
   -H "Content-Type: application/json" \
@@ -181,6 +193,7 @@ with real keys or enable external integrations until the security checklist is c
 - LLM synthesis is constrained to verified claims only; the deterministic AutoEval
   guardrail checks that the output cites every verified source.
 - PKB changes are proposals until approved by the owner.
+- Episodic memory is opt-in per completed task; HIGH-risk episodes and sensitive text are rejected.
 - Secrets remain in the deployment environment, never in Git.
 - The system defaults to disabled LLM and strict approval mode — safety is the
   starting position, not an opt-in.

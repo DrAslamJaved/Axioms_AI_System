@@ -29,6 +29,7 @@ from axioms.autoeval_agent import export_docx as export_autoeval_docx
 from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, build_content_package
 from axioms.content_agent import export_docx as export_content_docx
 from axioms.core import AxiomsCore, BlockedApprovalError, TaskStateError
+from axioms.episodic_memory import MemoryDecision
 from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.llm import LLMConfigurationError, get_provider
@@ -359,6 +360,12 @@ class ProposalDecisionIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class MemoryDecisionIn(BaseModel):
+    decision: MemoryDecision
+    approved_by: str = Field(min_length=2, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     try:
@@ -415,6 +422,48 @@ def decide_preference_proposal(
 @app.get("/personal-kb/entries")
 def list_personal_kb_entries() -> list[dict]:
     return core.kb_store.entries()
+
+
+@app.post("/tasks/{task_id}/memory-proposal")
+def propose_episodic_memory(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    try:
+        return core.propose_episodic_memory(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except TaskStateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/episodic-memory/proposals/{proposal_id}/decision")
+def decide_episodic_memory(
+    proposal_id: str,
+    payload: MemoryDecisionIn,
+    _auth: None = Depends(require_api_key),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    try:
+        return core.decide_episodic_memory(
+            proposal_id,
+            payload.decision,
+            principal or payload.approved_by,
+            payload.note,
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Episodic-memory proposal not found") from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.get("/episodic-memory/search")
+def search_episodic_memory(
+    query: str, limit: int = 5, _auth: None = Depends(require_api_key)
+) -> list[dict]:
+    try:
+        return core.recall_episodic_memory(query, limit=limit)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/tasks")

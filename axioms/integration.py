@@ -42,6 +42,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent("Crossref DOI verification", IntegrationState.IMPLEMENTED, "Real external metadata verification tool with injectable transport for offline testing."),
         IntegrationComponent("Tavily evidence discovery", IntegrationState.IMPLEMENTED, "Read-only search candidates with provenance and an explicit verification boundary; disabled until configured."),
         IntegrationComponent("Agentic research agent", IntegrationState.IMPLEMENTED, "Tool-using, LLM-synthesising research vertical with bounded generation and AutoEval guardrail."),
+        IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries are retained only after a separate owner decision."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
         IntegrationComponent("Redis Streams dispatch", IntegrationState.DEFERRED, "Requires idempotency, retry, dead-letter, trace, and operational tests."),
         IntegrationComponent("Semantic retrieval memory", IntegrationState.DEFERRED, "Requires consent, provenance, retention, deletion, and evaluation controls."),
