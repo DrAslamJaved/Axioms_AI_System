@@ -16,13 +16,16 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from urllib.parse import quote
+from time import monotonic
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
 CROSSREF_WORKS_URL = "https://api.crossref.org/works/"
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+ARXIV_QUERY_URL = "https://export.arxiv.org/api/query"
 
 # Crossref work types that are not peer-reviewed publications on their own.
 PREPRINT_TYPES = {"posted-content", "preprint"}
@@ -30,6 +33,7 @@ PREPRINT_TYPES = {"posted-content", "preprint"}
 # fetch(url) -> parsed JSON object. Injected so the network can be faked in tests.
 Fetch = Callable[[str], dict]
 TavilyFetch = Callable[[str, dict], dict]
+ArxivFetch = Callable[[str], str]
 
 
 class CrossrefError(RuntimeError):
@@ -38,6 +42,10 @@ class CrossrefError(RuntimeError):
 
 class TavilyError(RuntimeError):
     """Raised when controlled evidence discovery cannot complete safely."""
+
+
+class ArxivError(RuntimeError):
+    """Raised when bounded arXiv discovery cannot complete safely."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +84,14 @@ def _default_tavily_fetch(url: str, payload: dict, *, timeout: float = 20.0) -> 
     )
     with urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _default_arxiv_fetch(url: str, *, timeout: float = 20.0) -> str:
+    """Read-only arXiv Atom API transport for a fixed HTTPS endpoint."""
+
+    request = Request(url, headers={"User-Agent": "AxiomsAISystem/0.2 (research discovery)"})
+    with urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8")
 
 
 class CrossrefClient:
@@ -185,6 +201,112 @@ class TavilyClient:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class ArxivCandidate:
+    """A preprint candidate returned by arXiv; never a verified research claim."""
+
+    arxiv_id: str
+    title: str
+    authors: tuple[str, ...]
+    abstract_url: str
+    summary: str
+    published: str | None
+    updated: str | None
+    categories: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ArxivDiscoveryResult:
+    query: str
+    candidates: tuple[ArxivCandidate, ...]
+    retrieved_at: str
+    cached: bool = False
+    provenance: str = "arXiv Atom API read-only preprint discovery"
+    verification_boundary: str = (
+        "arXiv records are preprint candidates, not peer-reviewed sources or verified claims. "
+        "Verify metadata, publication status, and each claim before citation, synthesis, or external use."
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "query": self.query,
+            "candidates": [
+                {
+                    "arxiv_id": candidate.arxiv_id,
+                    "title": candidate.title,
+                    "authors": list(candidate.authors),
+                    "abstract_url": candidate.abstract_url,
+                    "summary": candidate.summary,
+                    "published": candidate.published,
+                    "updated": candidate.updated,
+                    "categories": list(candidate.categories),
+                }
+                for candidate in self.candidates
+            ],
+            "retrieved_at": self.retrieved_at,
+            "cached": self.cached,
+            "provenance": self.provenance,
+            "verification_boundary": self.verification_boundary,
+        }
+
+
+class ArxivClient:
+    """Bounded read-only preprint discovery with a small in-process cache and rate gate."""
+
+    def __init__(
+        self,
+        fetch: ArxivFetch | None = None,
+        *,
+        clock: Callable[[], float] = monotonic,
+        min_interval_seconds: float = 3.0,
+    ) -> None:
+        self._fetch = fetch or _default_arxiv_fetch
+        self._clock = clock
+        self._min_interval_seconds = min_interval_seconds
+        self._last_live_request_at: float | None = None
+        self._cache: dict[tuple[str, int], ArxivDiscoveryResult] = {}
+
+    def discover(self, query: str, *, max_results: int = 5) -> ArxivDiscoveryResult:
+        normalized_query = query.strip()
+        if len(normalized_query) < 8:
+            raise ArxivError("arXiv discovery requires a query of at least 8 characters.")
+        if not 1 <= max_results <= 10:
+            raise ArxivError("max_results must be between 1 and 10.")
+        cache_key = (normalized_query.casefold(), max_results)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return replace(cached, cached=True)
+        now = self._clock()
+        if self._last_live_request_at is not None:
+            elapsed = now - self._last_live_request_at
+            if elapsed < self._min_interval_seconds:
+                wait = self._min_interval_seconds - elapsed
+                raise ArxivError(f"arXiv discovery is rate limited; retry after {wait:.1f} seconds.")
+        params = {
+            "search_query": f'all:"{normalized_query}"',
+            "start": "0",
+            "max_results": str(max_results),
+            "sortBy": "submittedDate",
+            "sortOrder": "descending",
+        }
+        url = f"{ARXIV_QUERY_URL}?{urlencode(params)}"
+        try:
+            response = self._fetch(url)
+        except ArxivError:
+            raise
+        except Exception as error:
+            raise ArxivError(f"arXiv discovery failed: {error}") from error
+        self._last_live_request_at = now
+        candidates = _arxiv_candidates(response)
+        result = ArxivDiscoveryResult(
+            query=normalized_query,
+            candidates=candidates[:max_results],
+            retrieved_at=datetime.now(UTC).isoformat(),
+        )
+        self._cache[cache_key] = result
+        return result
+
+
 def _is_usable_source(row: object) -> bool:
     return isinstance(row, dict) and bool(str(row.get("title") or "").strip()) and str(
         row.get("url") or ""
@@ -202,6 +324,55 @@ def _discovered_source(row: object) -> DiscoveredSource:
         score=score,
         published_date=str(row["published_date"]) if row.get("published_date") else None,
     )
+
+
+def _arxiv_candidates(xml: str) -> tuple[ArxivCandidate, ...]:
+    if not isinstance(xml, str) or not xml.strip():
+        raise ArxivError("arXiv returned an empty response.")
+    try:
+        root = ElementTree.fromstring(xml)
+    except ElementTree.ParseError as error:
+        raise ArxivError(f"arXiv returned malformed Atom XML: {error}") from error
+    atom = "{http://www.w3.org/2005/Atom}"
+    candidates: list[ArxivCandidate] = []
+    for entry in root.findall(f"{atom}entry"):
+        raw_id = _xml_text(entry, f"{atom}id")
+        title = _xml_text(entry, f"{atom}title")
+        if not raw_id or not title:
+            continue
+        abstract_url = raw_id.replace("http://", "https://", 1)
+        arxiv_id = abstract_url.rstrip("/").rsplit("/", maxsplit=1)[-1]
+        authors = tuple(
+            author_name
+            for author in entry.findall(f"{atom}author")
+            if (author_name := _xml_text(author, f"{atom}name"))
+        )
+        categories = tuple(
+            category
+            for category_node in entry.findall(f"{atom}category")
+            if (category := str(category_node.get("term") or "").strip())
+        )
+        candidates.append(
+            ArxivCandidate(
+                arxiv_id=arxiv_id,
+                title=title,
+                authors=authors,
+                abstract_url=abstract_url,
+                summary=_xml_text(entry, f"{atom}summary") or "",
+                published=_xml_text(entry, f"{atom}published"),
+                updated=_xml_text(entry, f"{atom}updated"),
+                categories=categories,
+            )
+        )
+    return tuple(candidates)
+
+
+def _xml_text(node: ElementTree.Element, path: str) -> str | None:
+    child = node.find(path)
+    if child is None or child.text is None:
+        return None
+    normalized = " ".join(child.text.split())
+    return normalized or None
 
 
 def _record_from_message(doi: str, message: dict) -> CrossrefRecord:
