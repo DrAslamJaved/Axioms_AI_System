@@ -149,6 +149,11 @@ class ApprovalIn(BaseModel):
     override_blocking: bool = False
 
 
+class CancellationIn(BaseModel):
+    requested_by: str = Field(min_length=2, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class LecturePlanIn(BaseModel):
     topic: str = Field(min_length=2, max_length=300)
     course_level: str = Field(min_length=2, max_length=100)
@@ -920,6 +925,23 @@ def execute_task(
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
     except TaskStateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post("/tasks/{task_id}/cancel")
+def cancel_task(
+    task_id: str,
+    payload: CancellationIn,
+    _auth: None = Depends(require_api_key),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    """Request safe cancellation before or at the next local graph-layer checkpoint."""
+    requester = principal or payload.requested_by
+    try:
+        return core.request_cancellation(task_id, requester, payload.note)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except (TaskStateError, ValueError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
