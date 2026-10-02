@@ -75,7 +75,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent(
             "Durable local dispatch",
             IntegrationState.IMPLEMENTED,
-            "SQLite-backed approved-task queue with idempotency, atomic worker claims, bounded retry, dead-letter state, and no autonomous worker.",
+            "SQLite-backed approved-task queue with idempotency, atomic leased worker claims, bounded retry, dead-letter state, and no autonomous worker.",
         ),
         IntegrationComponent(
             "Versioned task graphs",
