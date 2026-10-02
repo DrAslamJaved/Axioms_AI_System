@@ -154,6 +154,12 @@ class CancellationIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class RecoveryIn(BaseModel):
+    recovered_by: str = Field(min_length=2, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
+    confirm_execution_stopped: bool = False
+
+
 class LecturePlanIn(BaseModel):
     topic: str = Field(min_length=2, max_length=300)
     course_level: str = Field(min_length=2, max_length=100)
@@ -939,6 +945,28 @@ def cancel_task(
     requester = principal or payload.requested_by
     try:
         return core.request_cancellation(task_id, requester, payload.note)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except (TaskStateError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post("/tasks/{task_id}/recover")
+def recover_task(
+    task_id: str,
+    payload: RecoveryIn,
+    _auth: None = Depends(require_api_key),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    """Recover a human-confirmed interrupted local task; fresh approval is required to rerun it."""
+    operator = principal or payload.recovered_by
+    try:
+        return core.recover_interrupted_task(
+            task_id,
+            operator,
+            payload.note,
+            confirm_execution_stopped=payload.confirm_execution_stopped,
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
     except (TaskStateError, ValueError) as error:

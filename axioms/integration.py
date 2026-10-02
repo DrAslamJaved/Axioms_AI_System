@@ -92,12 +92,17 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "A named human can stop an approved task immediately or a running task at a persisted graph-layer checkpoint; partial drafts are discarded.",
         ),
+        IntegrationComponent(
+            "Interrupted task recovery",
+            IntegrationState.IMPLEMENTED,
+            "A named operator can attest that local execution stopped, discard any partial work, and return a stranded task to pending approval for a fresh decision.",
+        ),
         IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries are retained only after a separate owner decision."),
         IntegrationComponent("Similarity screening", IntegrationState.IMPLEMENTED, "Local token-shingle comparison against supplied texts; produces human-review signals, never a plagiarism verdict."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
         IntegrationComponent("Redis Streams dispatch", IntegrationState.DEFERRED, "Requires distributed-worker deployment, leases, delayed retry, recovery, metrics, and operational tests."),
         IntegrationComponent("Semantic retrieval memory", IntegrationState.DEFERRED, "Requires consent, provenance, retention, deletion, and evaluation controls."),
-        IntegrationComponent("Distributed parallel graph execution", IntegrationState.DEFERRED, "Requires distributed checkpoint recovery, resource limits, leases, and operational tests."),
+        IntegrationComponent("Distributed parallel graph execution", IntegrationState.DEFERRED, "Requires distributed recovery, resource limits, worker leases, and operational tests."),
         IntegrationComponent("Live external connectors", IntegrationState.DEFERRED, "Requires least-privilege credentials, dry-run contracts, rate limits, and approval scopes."),
         IntegrationComponent("Cloud deployment", IntegrationState.DEFERRED, "Requires hosting choice, secrets, threat model, backup/restore, and privacy review."),
     )

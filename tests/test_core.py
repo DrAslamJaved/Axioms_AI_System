@@ -225,6 +225,53 @@ def test_running_task_stops_at_checkpoint_and_discards_partial_drafts(tmp_path: 
     assert result["agent_trace"][-1]["kind"] == StepKind.EXECUTION_CANCELLED.value
 
 
+def test_interrupted_running_task_requires_human_attestation_and_fresh_approval(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    payload = core.store.get(record.task_id)
+    assert payload is not None
+    payload["status"] = TaskStatus.RUNNING.value
+    core.store.save(core_module._record_from_payload(payload))
+
+    with pytest.raises(ValueError, match="confirmation"):
+        core.recover_interrupted_task(record.task_id, "Dr Aslam")
+
+    recovered = core.recover_interrupted_task(
+        record.task_id,
+        "Dr Aslam",
+        "Local process exited during execution",
+        confirm_execution_stopped=True,
+    )
+
+    assert recovered["status"] == TaskStatus.PENDING_APPROVAL.value
+    assert recovered["approved_by"] is None
+    assert recovered["deliverables"] == []
+    assert recovered["agent_trace"][-1]["kind"] == StepKind.EXECUTION_RECOVERED.value
+    with pytest.raises(TaskStateError, match="Only an approved task"):
+        core.execute(record.task_id)
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    assert core.execute(record.task_id)["status"] == TaskStatus.AWAITING_REVIEW.value
+
+
+def test_recovery_finalises_a_stranded_cancellation_request(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    payload = core.store.get(record.task_id)
+    assert payload is not None
+    payload["status"] = TaskStatus.CANCELLATION_REQUESTED.value
+    core.store.save(core_module._record_from_payload(payload))
+
+    recovered = core.recover_interrupted_task(
+        record.task_id, "Dr Aslam", confirm_execution_stopped=True
+    )
+
+    assert recovered["status"] == TaskStatus.CANCELLED.value
+    assert recovered["deliverables"] == []
+    assert recovered["agent_trace"][-1]["kind"] == StepKind.EXECUTION_CANCELLED.value
+
+
 def test_specialist_handoffs_are_only_created_during_execution(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Research literature and prepare a quiz plus a YouTube video"))
