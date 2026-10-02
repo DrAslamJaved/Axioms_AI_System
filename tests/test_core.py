@@ -51,6 +51,35 @@ def test_approved_task_executes_then_requires_final_review(tmp_path: Path) -> No
     assert completed["deliverables"][0]["status"] == TaskStatus.APPROVED.value
 
 
+def test_cross_agent_autoeval_consolidates_completed_drafts_without_approving_them(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture and write an announcement"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    executed = core.execute(record.task_id)
+
+    reviewed = core.create_cross_agent_autoeval(record.task_id)
+
+    assert reviewed["status"] == TaskStatus.AWAITING_REVIEW.value
+    assert len(reviewed["deliverables"]) == len(executed["deliverables"]) + 1
+    report = reviewed["deliverables"][-1]
+    assert report["agent"] == AgentName.AUTOEVAL.value
+    assert report["status"] == TaskStatus.PENDING_APPROVAL.value
+    assert "Aggregate quality signal" in report["content"]
+    assert "Final human review remains required" in report["content"]
+    assert any(step["kind"] == StepKind.CROSS_AGENT_AUTOEVAL_CREATED for step in reviewed["agent_trace"])
+
+    repeated = core.create_cross_agent_autoeval(record.task_id)
+    assert len(repeated["deliverables"]) == len(reviewed["deliverables"])
+
+
+def test_cross_agent_autoeval_requires_completed_drafts_awaiting_review(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+
+    with pytest.raises(TaskStateError, match="completed drafts awaiting final human review"):
+        core.create_cross_agent_autoeval(record.task_id)
+
+
 def test_execution_requires_recorded_approval(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Prepare a lecture and write an announcement"))
