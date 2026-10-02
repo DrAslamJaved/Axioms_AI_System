@@ -44,6 +44,9 @@ real tool use and optional LLM synthesis:
   idempotency key, atomic worker claim, bounded retry, and dead-letter state.
   A manually invoked local worker runs deterministic drafts only; it cannot
   perform external actions.
+- **Versioned task graphs** attach a deterministic `routing.v1` graph and hash
+  to every task. Dependencies are validated for missing nodes and cycles before
+  approval; execution layers are recorded but are not yet run in parallel.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
