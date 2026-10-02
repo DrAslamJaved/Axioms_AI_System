@@ -64,3 +64,16 @@ def test_expired_worker_lease_requeues_then_dead_letters_at_budget(tmp_path: Pat
     assert store.claim_next("worker-c", now=started + timedelta(seconds=242)) is None
     final = store.get(job.job_id)
     assert final is not None and final.status is DispatchStatus.DEAD_LETTER
+
+
+def test_only_the_current_worker_can_renew_an_unexpired_lease(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    started = datetime(2026, 1, 1, tzinfo=UTC)
+    job = store.enqueue("task_005", idempotency_key="dispatch-task-005")
+    store.claim_next("worker-a", now=started)
+    renewed = store.renew_lease(job.job_id, worker_id="worker-a", now=started + timedelta(seconds=60))
+    assert renewed.lease_expires_at == (started + timedelta(seconds=180)).isoformat()
+    with pytest.raises(DispatchStateError, match="holding"):
+        store.renew_lease(job.job_id, worker_id="worker-b", now=started + timedelta(seconds=61))
+    with pytest.raises(DispatchStateError, match="expired"):
+        store.renew_lease(job.job_id, worker_id="worker-a", now=started + timedelta(seconds=181))

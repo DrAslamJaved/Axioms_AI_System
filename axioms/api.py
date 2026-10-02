@@ -446,6 +446,11 @@ class DispatchFinishIn(BaseModel):
     retryable: bool = True
 
 
+class DispatchRenewIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=200)
+    lease_seconds: int = Field(default=120, ge=30, le=900)
+
+
 class DispatchRunIn(BaseModel):
     worker_id: str = Field(min_length=2, max_length=200)
 
@@ -905,6 +910,21 @@ def finish_dispatch_job(
             succeeded=payload.succeeded,
             error=payload.error,
             retryable=payload.retryable,
+        ).to_dict()
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Dispatch job not found") from error
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post("/dispatch/jobs/{job_id}/renew")
+def renew_dispatch_lease(
+    job_id: str, payload: DispatchRenewIn, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Extend a still-valid local lease held by the named worker only."""
+    try:
+        return core.dispatch_store.renew_lease(
+            job_id, worker_id=payload.worker_id, lease_seconds=payload.lease_seconds
         ).to_dict()
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Dispatch job not found") from error
