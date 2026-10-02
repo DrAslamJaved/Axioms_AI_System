@@ -72,6 +72,7 @@ from axioms.social_media_agent import (
     build_social_media_package,
 )
 from axioms.social_media_agent import export_docx as export_social_media_docx
+from axioms.social_media_agent_ai import run_agentic_social_media_review
 from axioms.tools import CrossrefClient, TavilyClient, TavilyError
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
@@ -687,6 +688,21 @@ def create_content_package_docx(
 def create_social_media_package(payload: SocialMediaPackageIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_social_media_package(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/social-media-packages/agentic")
+def create_agentic_social_media_review(
+    payload: SocialMediaPackageIn, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Generate an internal review; this endpoint cannot schedule or publish posts."""
+    try:
+        provider = get_provider()
+    except LLMConfigurationError as error:
+        raise HTTPException(status_code=503, detail=f"LLM provider misconfigured: {error}") from error
+    try:
+        return run_agentic_social_media_review(payload.to_agent_request(), provider=provider).to_dict()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
