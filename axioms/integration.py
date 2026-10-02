@@ -34,7 +34,7 @@ class SystemReadinessReport:
 def build_system_readiness_report() -> SystemReadinessReport:
     """State only implemented capabilities; deferred infrastructure is never represented as active."""
     components = (
-        IntegrationComponent("Axioms Core routing", IntegrationState.IMPLEMENTED, "Typed specialist routing with SQLite task episodes."),
+        IntegrationComponent("Axioms Core runtime", IntegrationState.IMPLEMENTED, "Persisted plan → approval → execution → final-review lifecycle with per-step agent traces."),
         IntegrationComponent("Specialist registry", IntegrationState.IMPLEMENTED, "Eight review-first profiles with API endpoints."),
         IntegrationComponent("Human approval boundary", IntegrationState.IMPLEMENTED, "Risk-tier classification (LOW/ELEVATED/HIGH) with blocking enforcement on HIGH-risk tasks."),
         IntegrationComponent("API-key authentication", IntegrationState.IMPLEMENTED, "Named multi-key and single-key modes with principal resolution for authenticated approver identity."),

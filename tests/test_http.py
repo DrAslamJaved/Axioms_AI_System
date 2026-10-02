@@ -76,6 +76,32 @@ def test_approval_requires_a_named_approver() -> None:
     assert approved.json()["approved_by"] == "Dr Aslam"
 
 
+def test_task_lifecycle_requires_approval_then_final_review() -> None:
+    created = client.post("/tasks", json={"goal": "Prepare a lecture on spectral graph theory"})
+    task_id = created.json()["task_id"]
+
+    blocked = client.post(f"/tasks/{task_id}/execute")
+    assert blocked.status_code == 409
+
+    authorised = client.post(
+        f"/tasks/{task_id}/approval",
+        json={"decision": "approve", "approved_by": "Dr Aslam", "note": "Proceed locally"},
+    )
+    assert authorised.json()["status"] == "approved"
+
+    executed = client.post(f"/tasks/{task_id}/execute")
+    assert executed.status_code == 200
+    assert executed.json()["status"] == "awaiting_review"
+    assert executed.json()["deliverables"]
+    assert any(step["kind"] == "agent_dispatched" for step in executed.json()["agent_trace"])
+
+    completed = client.post(
+        f"/tasks/{task_id}/approval",
+        json={"decision": "approve", "approved_by": "Dr Aslam", "note": "Final review"},
+    )
+    assert completed.json()["status"] == "completed"
+
+
 def test_task_carries_risk_tier_and_policy_reason() -> None:
     created = client.post("/tasks", json={"goal": "Email a course announcement to the mailing list"})
     body = created.json()

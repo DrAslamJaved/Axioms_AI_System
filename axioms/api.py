@@ -28,7 +28,7 @@ from axioms.autoeval_agent import (
 from axioms.autoeval_agent import export_docx as export_autoeval_docx
 from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, build_content_package
 from axioms.content_agent import export_docx as export_content_docx
-from axioms.core import AxiomsCore, BlockedApprovalError
+from axioms.core import AxiomsCore, BlockedApprovalError, TaskStateError
 from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.llm import LLMConfigurationError, get_provider
@@ -620,6 +620,17 @@ def get_task(task_id: str) -> dict:
     return task
 
 
+@app.post("/tasks/{task_id}/execute")
+def execute_task(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    """Run an already-approved task and return review-only local drafts."""
+    try:
+        return core.execute(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except TaskStateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 @app.post("/tasks/{task_id}/approval")
 def approval(
     task_id: str,
@@ -640,4 +651,6 @@ def approval(
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
     except BlockedApprovalError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except TaskStateError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error

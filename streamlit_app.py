@@ -693,7 +693,7 @@ with st.form("new-task"):
     audience = st.text_input("Audience", value="unspecified")
     deadline = st.text_input("Deadline (optional)")
     external = st.checkbox("This would be delivered externally")
-    submitted = st.form_submit_button("Create reviewed draft")
+    submitted = st.form_submit_button("Create task plan")
 
 if submitted:
     response = _post(
@@ -720,20 +720,23 @@ if task:
     for deliverable in task["deliverables"]:
         with st.expander(deliverable["title"], expanded=True):
             st.markdown(deliverable["content"])
-    col1, col2 = st.columns(2)
+    if task.get("agent_trace"):
+        with st.expander("Auditable agent trace"):
+            st.dataframe(task["agent_trace"], hide_index=True, use_container_width=True)
+    col1, col2, col3 = st.columns(3)
     override = False
     if risk == "high":
         override = st.checkbox(
             "I acknowledge the data-governance risk and override the block",
             key="override_blocking",
         )
-    if col1.button("Approve drafts"):
+    if task["status"] in {"planned", "pending_approval"} and col1.button("Approve execution"):
         response = _post(
             f"{API_URL}/tasks/{task['task_id']}/approval",
             {
                 "decision": "approve",
                 "approved_by": approver_name,
-                "note": f"Approved by {approver_name} through review UI.",
+                "note": f"Execution approved by {approver_name} through review UI.",
                 "override_blocking": override,
             },
         )
@@ -742,7 +745,28 @@ if task:
             st.rerun()
         else:
             st.error(f"Error {response.status_code}: {response.text}")
-    if col2.button("Reject drafts"):
+    if task["status"] == "approved" and col2.button("Run approved task"):
+        response = _post(f"{API_URL}/tasks/{task['task_id']}/execute", {})
+        if response.ok:
+            st.session_state["task"] = response.json()
+            st.rerun()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
+    if task["status"] == "awaiting_review" and col1.button("Accept reviewed drafts"):
+        response = _post(
+            f"{API_URL}/tasks/{task['task_id']}/approval",
+            {
+                "decision": "approve",
+                "approved_by": approver_name,
+                "note": f"Final review accepted by {approver_name} through review UI.",
+            },
+        )
+        if response.ok:
+            st.session_state["task"] = response.json()
+            st.rerun()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
+    if task["status"] in {"planned", "pending_approval", "awaiting_review"} and col3.button("Reject task/drafts"):
         response = _post(
             f"{API_URL}/tasks/{task['task_id']}/approval",
             {
