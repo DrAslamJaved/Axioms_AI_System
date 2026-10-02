@@ -54,6 +54,20 @@ def test_execution_requires_recorded_approval(tmp_path: Path) -> None:
         core.execute(record.task_id)
 
 
+def test_only_approved_tasks_can_be_durably_queued_with_an_idempotent_trace(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    with pytest.raises(TaskStateError, match="Only an approved task"):
+        core.enqueue_approved_task(record.task_id, idempotency_key="lecture-dispatch-001")
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    first = core.enqueue_approved_task(record.task_id, idempotency_key="lecture-dispatch-001")
+    repeated = core.enqueue_approved_task(record.task_id, idempotency_key="lecture-dispatch-001")
+    assert repeated.job_id == first.job_id
+    task = core.store.get(record.task_id)
+    assert task is not None
+    assert [step["kind"] for step in task["agent_trace"]].count(StepKind.DISPATCH_QUEUED) == 1
+
+
 def test_mixed_goal_dispatches_every_planned_specialist(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Prepare a lecture and write an announcement"))
