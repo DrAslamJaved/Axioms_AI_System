@@ -18,6 +18,7 @@ from axioms.api import (
     SimilarityScreenIn,
     SocialMediaPackageIn,
     WritingDraftIn,
+    create_agentic_assessment_blueprint,
     create_assessment_blueprint,
     create_assessment_instructor_docx,
     create_assessment_student_docx,
@@ -217,6 +218,15 @@ def assessment_payload() -> AssessmentBlueprintIn:
 def test_assessment_handler_has_exact_mark_allocation() -> None:
     body = create_assessment_blueprint(assessment_payload())
     assert sum(item["marks"] for item in body["questions"]) == 20
+
+
+def test_agentic_assessment_handler_safely_degrades_when_llm_is_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "disabled")
+    body = create_agentic_assessment_blueprint(assessment_payload())
+    assert not body["generation_enabled"]
+    assert body["design_review"] is None
+    assert body["instructor_review_required"]
+    assert body["student_release_blocked"]
 
 
 def test_assessment_export_handlers_separate_student_and_instructor_docs(tmp_path: Path, monkeypatch) -> None:
