@@ -57,6 +57,7 @@ class EpisodicMemoryStore:
                 "CREATE TABLE IF NOT EXISTS episode_memory_entries "
                 "(memory_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
             )
+            connection.execute("CREATE TABLE IF NOT EXISTS episode_memory_deletions (memory_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path)
@@ -133,3 +134,17 @@ class EpisodicMemoryStore:
             for item in matches
             if normalized in item["summary"].casefold() or any(normalized in tag.casefold() for tag in item["tags"])
         ][:limit]
+
+    def delete(self, memory_id: str, deleted_by: str, note: str | None = None) -> dict:
+        owner = deleted_by.strip()
+        if not owner:
+            raise ValueError("An episodic-memory deletion needs an identified owner.")
+        with self._connect() as connection:
+            row = connection.execute("SELECT payload FROM episode_memory_entries WHERE memory_id = ?", (memory_id,)).fetchone()
+            if row is None:
+                raise KeyError(memory_id)
+            entry = json.loads(row[0])
+            deletion = {"memory_id": memory_id, "task_id": entry["task_id"], "deleted_at": datetime.now(UTC).isoformat(), "deleted_by": owner, "note": note}
+            connection.execute("INSERT INTO episode_memory_deletions (memory_id, payload) VALUES (?, ?)", (memory_id, json.dumps(deletion)))
+            connection.execute("DELETE FROM episode_memory_entries WHERE memory_id = ?", (memory_id,))
+        return deletion
