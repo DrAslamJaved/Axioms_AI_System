@@ -15,6 +15,7 @@ from axioms.api import (
     ProposalDecisionIn,
     ResearchBriefIn,
     ResearchDiscoveryIn,
+    SimilarityScreenIn,
     SocialMediaPackageIn,
     WritingDraftIn,
     create_assessment_blueprint,
@@ -43,6 +44,7 @@ from axioms.api import (
     list_personal_kb_entries,
     propose_episodic_memory,
     search_episodic_memory,
+    similarity_screen,
     system_readiness,
 )
 from axioms.core import AxiomsCore
@@ -169,6 +171,23 @@ def test_episodic_memory_handlers_require_a_second_approval(tmp_path: Path, monk
     )
     assert decided["decided_by"] == "Dr Aslam"
     assert search_episodic_memory("spectral")[0]["task_id"] == record.task_id
+
+
+def test_similarity_screen_handler_returns_a_review_signal_not_a_verdict() -> None:
+    body = similarity_screen(
+        SimilarityScreenIn(
+            submitted_text="Fuzzy similarity supports transparent DTI ranking.",
+            comparison_texts=[
+                {
+                    "reference_id": "known_text",
+                    "text": "Fuzzy similarity supports transparent DTI ranking.",
+                }
+            ],
+            review_threshold=0.5,
+        )
+    )
+    assert body["matches"][0]["review_required"]
+    assert "plagiarism finding" in body["screening_boundary"]
 
 
 def test_research_export_handlers_return_docx_and_bibtex(tmp_path: Path, monkeypatch) -> None:
