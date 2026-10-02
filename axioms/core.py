@@ -181,6 +181,68 @@ class AxiomsCore:
             return record.to_dict()
         raise TaskStateError(f"Task {task_id} cannot be cancelled while it is {status.value}.")
 
+    def recover_interrupted_task(
+        self,
+        task_id: str,
+        recovered_by: str,
+        note: str | None = None,
+        *,
+        confirm_execution_stopped: bool = False,
+    ) -> dict:
+        """Recover only a human-confirmed, interrupted local execution.
+
+        Recovery never resumes a task automatically: a stranded RUNNING task
+        returns to pending approval with no retained drafts. A stranded
+        cancellation request is finalised instead. The operator must attest
+        that the prior execution has stopped before either transition.
+        """
+        operator = recovered_by.strip()
+        if not operator:
+            raise ValueError("A recovery operator is required.")
+        if not confirm_execution_stopped:
+            raise ValueError("Recovery requires confirmation that the prior execution has stopped.")
+        payload = self.store.get(task_id)
+        if payload is None:
+            raise KeyError(task_id)
+        status = TaskStatus(payload["status"])
+        if status is TaskStatus.CANCELLATION_REQUESTED:
+            record = _record_from_payload(payload)
+            record.status = TaskStatus.CANCELLED
+            record.deliverables = []
+            record.agent_trace.append(
+                AgentStep(
+                    kind=StepKind.EXECUTION_CANCELLED,
+                    summary=_recovery_summary(operator, note, "Finalised an interrupted cancellation request."),
+                )
+            )
+            if not self.store.save_if_status(record, TaskStatus.CANCELLATION_REQUESTED.value):
+                return self.recover_interrupted_task(
+                    task_id, operator, note, confirm_execution_stopped=True
+                )
+            return record.to_dict()
+        if status is not TaskStatus.RUNNING:
+            raise TaskStateError(f"Task {task_id} cannot be recovered while it is {status.value}.")
+
+        record = _record_from_payload(payload)
+        if record.deliverables:
+            raise TaskStateError("A running task with retained drafts cannot be recovered automatically.")
+        record.status = TaskStatus.PENDING_APPROVAL
+        record.approved_by = None
+        record.approval_note = None
+        record.agent_trace.append(
+            AgentStep(
+                kind=StepKind.EXECUTION_RECOVERED,
+                summary=_recovery_summary(
+                    operator,
+                    note,
+                    "Confirmed prior execution stopped; partial drafts were discarded and fresh approval is required.",
+                ),
+            )
+        )
+        if not self.store.save_if_status(record, TaskStatus.RUNNING.value):
+            return self.recover_interrupted_task(task_id, operator, note, confirm_execution_stopped=True)
+        return record.to_dict()
+
     def execute(self, task_id: str, *, parallel: bool = False) -> dict:
         """Run an approved plan locally and return its drafts for final review.
 
@@ -474,6 +536,12 @@ def _cancellation_summary(requested_by: str, note: str | None, outcome: str) -> 
     """Keep the human cancellation decision legible in the persisted audit trace."""
     note_suffix = f" Note: {note.strip()}" if note and note.strip() else ""
     return f"Cancellation requested by {requested_by}. {outcome}{note_suffix}"
+
+
+def _recovery_summary(recovered_by: str, note: str | None, outcome: str) -> str:
+    """Keep a human recovery attestation visible in the persisted task trace."""
+    note_suffix = f" Note: {note.strip()}" if note and note.strip() else ""
+    return f"Interrupted execution recovery confirmed by {recovered_by}. {outcome}{note_suffix}"
 
 
 def _record_from_payload(payload: dict) -> TaskRecord:
