@@ -26,6 +26,7 @@ from xml.etree import ElementTree
 CROSSREF_WORKS_URL = "https://api.crossref.org/works/"
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 ARXIV_QUERY_URL = "https://export.arxiv.org/api/query"
+SEMANTIC_SCHOLAR_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
 # Crossref work types that are not peer-reviewed publications on their own.
 PREPRINT_TYPES = {"posted-content", "preprint"}
@@ -34,6 +35,7 @@ PREPRINT_TYPES = {"posted-content", "preprint"}
 Fetch = Callable[[str], dict]
 TavilyFetch = Callable[[str, dict], dict]
 ArxivFetch = Callable[[str], str]
+SemanticScholarFetch = Callable[[str, dict[str, str]], dict]
 
 
 class CrossrefError(RuntimeError):
@@ -46,6 +48,10 @@ class TavilyError(RuntimeError):
 
 class ArxivError(RuntimeError):
     """Raised when bounded arXiv discovery cannot complete safely."""
+
+
+class SemanticScholarError(RuntimeError):
+    """Raised when controlled Semantic Scholar discovery cannot complete safely."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +98,16 @@ def _default_arxiv_fetch(url: str, *, timeout: float = 20.0) -> str:
     request = Request(url, headers={"User-Agent": "AxiomsAISystem/0.2 (research discovery)"})
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8")
+
+
+def _default_semantic_scholar_fetch(
+    url: str, headers: dict[str, str], *, timeout: float = 20.0
+) -> dict:
+    """Read-only Semantic Scholar Academic Graph API transport."""
+
+    request = Request(url, headers=headers)
+    with urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 class CrossrefClient:
@@ -307,6 +323,121 @@ class ArxivClient:
         return result
 
 
+@dataclass(frozen=True, slots=True)
+class SemanticScholarCandidate:
+    """A bibliographic candidate; Semantic Scholar metadata does not verify its claims."""
+
+    paper_id: str
+    title: str
+    authors: tuple[str, ...]
+    url: str | None
+    abstract: str | None
+    year: int | None
+    venue: str | None
+    doi: str | None
+    publication_types: tuple[str, ...]
+    citation_count: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticScholarDiscoveryResult:
+    query: str
+    candidates: tuple[SemanticScholarCandidate, ...]
+    retrieved_at: str
+    cached: bool = False
+    provenance: str = "Semantic Scholar Academic Graph API read-only discovery"
+    verification_boundary: str = (
+        "Semantic Scholar records are unverified bibliographic candidates. Metadata, publication "
+        "status, citations, and every claim must be independently checked before citation, synthesis, or external use."
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "query": self.query,
+            "candidates": [
+                {
+                    "paper_id": candidate.paper_id,
+                    "title": candidate.title,
+                    "authors": list(candidate.authors),
+                    "url": candidate.url,
+                    "abstract": candidate.abstract,
+                    "year": candidate.year,
+                    "venue": candidate.venue,
+                    "doi": candidate.doi,
+                    "publication_types": list(candidate.publication_types),
+                    "citation_count": candidate.citation_count,
+                }
+                for candidate in self.candidates
+            ],
+            "retrieved_at": self.retrieved_at,
+            "cached": self.cached,
+            "provenance": self.provenance,
+            "verification_boundary": self.verification_boundary,
+        }
+
+
+class SemanticScholarClient:
+    """Bounded, keyed, read-only Semantic Scholar discovery with cache and rate gate."""
+
+    def __init__(
+        self,
+        api_key: str | None,
+        fetch: SemanticScholarFetch | None = None,
+        *,
+        clock: Callable[[], float] = monotonic,
+        min_interval_seconds: float = 3.0,
+    ) -> None:
+        self._api_key = (api_key or "").strip()
+        self._fetch = fetch or _default_semantic_scholar_fetch
+        self._clock = clock
+        self._min_interval_seconds = min_interval_seconds
+        self._last_live_request_at: float | None = None
+        self._cache: dict[tuple[str, int], SemanticScholarDiscoveryResult] = {}
+
+    def discover(self, query: str, *, max_results: int = 5) -> SemanticScholarDiscoveryResult:
+        normalized_query = query.strip()
+        if len(normalized_query) < 8:
+            raise SemanticScholarError("Semantic Scholar discovery requires a query of at least 8 characters.")
+        if not 1 <= max_results <= 10:
+            raise SemanticScholarError("max_results must be between 1 and 10.")
+        if not self._api_key:
+            raise SemanticScholarError(
+                "Semantic Scholar is not configured. Set SEMANTIC_SCHOLAR_API_KEY to enable read-only discovery."
+            )
+        cache_key = (normalized_query.casefold(), max_results)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return replace(cached, cached=True)
+        now = self._clock()
+        if self._last_live_request_at is not None:
+            elapsed = now - self._last_live_request_at
+            if elapsed < self._min_interval_seconds:
+                wait = self._min_interval_seconds - elapsed
+                raise SemanticScholarError(
+                    f"Semantic Scholar discovery is rate limited; retry after {wait:.1f} seconds."
+                )
+        fields = "paperId,title,authors,url,abstract,year,venue,externalIds,publicationTypes,citationCount"
+        url = f"{SEMANTIC_SCHOLAR_SEARCH_URL}?{urlencode({'query': normalized_query, 'limit': max_results, 'fields': fields})}"
+        headers = {"User-Agent": "AxiomsAISystem/0.2 (research discovery)", "x-api-key": self._api_key}
+        try:
+            response = self._fetch(url, headers)
+        except SemanticScholarError:
+            raise
+        except Exception as error:
+            raise SemanticScholarError(f"Semantic Scholar discovery failed: {error}") from error
+        self._last_live_request_at = now
+        rows = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(rows, list):
+            raise SemanticScholarError("Semantic Scholar returned no usable paper-result list.")
+        result = SemanticScholarDiscoveryResult(
+            query=normalized_query,
+            candidates=tuple(_semantic_scholar_candidate(row) for row in rows if _is_semantic_scholar_candidate(row)),
+            retrieved_at=datetime.now(UTC).isoformat(),
+        )
+        self._cache[cache_key] = result
+        return result
+
+
 def _is_usable_source(row: object) -> bool:
     return isinstance(row, dict) and bool(str(row.get("title") or "").strip()) and str(
         row.get("url") or ""
@@ -323,6 +454,46 @@ def _discovered_source(row: object) -> DiscoveredSource:
         snippet=str(row.get("content") or "").strip(),
         score=score,
         published_date=str(row["published_date"]) if row.get("published_date") else None,
+    )
+
+
+def _is_semantic_scholar_candidate(row: object) -> bool:
+    return isinstance(row, dict) and bool(str(row.get("paperId") or "").strip()) and bool(
+        str(row.get("title") or "").strip()
+    )
+
+
+def _semantic_scholar_candidate(row: object) -> SemanticScholarCandidate:
+    assert isinstance(row, dict)
+    authors = tuple(
+        str(author.get("name") or "").strip()
+        for author in row.get("authors") or []
+        if isinstance(author, dict) and str(author.get("name") or "").strip()
+    )
+    publication_types = tuple(
+        str(publication_type).strip()
+        for publication_type in row.get("publicationTypes") or []
+        if str(publication_type).strip()
+    )
+    external_ids = row.get("externalIds")
+    doi = (
+        str(external_ids.get("DOI")).strip()
+        if isinstance(external_ids, dict) and external_ids.get("DOI")
+        else None
+    )
+    raw_year = row.get("year")
+    raw_citation_count = row.get("citationCount")
+    return SemanticScholarCandidate(
+        paper_id=str(row["paperId"]).strip(),
+        title=str(row["title"]).strip(),
+        authors=authors,
+        url=str(row["url"]).strip() if row.get("url") else None,
+        abstract=str(row["abstract"]).strip() if row.get("abstract") else None,
+        year=raw_year if isinstance(raw_year, int) else None,
+        venue=str(row["venue"]).strip() if row.get("venue") else None,
+        doi=doi,
+        publication_types=publication_types,
+        citation_count=raw_citation_count if isinstance(raw_citation_count, int) else None,
     )
 
 
