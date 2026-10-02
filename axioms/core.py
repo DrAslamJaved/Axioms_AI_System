@@ -58,7 +58,13 @@ class AxiomsCore:
         self.dispatch_store = dispatch_store or DurableDispatchStore(self.store.path)
 
     def create_task(self, request: TaskRequest) -> TaskRecord:
-        record = TaskRecord(request=request, subtasks=build_task_graph(request))
+        graph = build_task_graph(request)
+        record = TaskRecord(
+            request=request,
+            subtasks=list(graph.subtasks),
+            graph_version=graph.version,
+            graph_digest=graph.digest,
+        )
         policy = assess_request(request)
         record.status = TaskStatus.PENDING_APPROVAL if policy.requires_approval else TaskStatus.PLANNED
         record.risk_tier = policy.risk_tier
@@ -66,7 +72,10 @@ class AxiomsCore:
         record.agent_trace.append(
             AgentStep(
                 kind=StepKind.PLAN_CREATED,
-                summary=f"Planned {len(record.subtasks)} specialist subtask(s); execution is held for approval.",
+                summary=(
+                    f"Planned {len(record.subtasks)} specialist subtask(s) using {graph.version} "
+                    f"({graph.digest[:12]}); execution is held for approval."
+                ),
             )
         )
         self.store.save(record)
@@ -328,6 +337,8 @@ def _record_from_payload(payload: dict) -> TaskRecord:
     if payload.get("risk_tier"):
         record.risk_tier = RiskTier(payload["risk_tier"])
     record.policy_reason = payload.get("policy_reason")
+    record.graph_version = payload.get("graph_version", "routing.v1")
+    record.graph_digest = payload.get("graph_digest")
     record.subtasks = [
         Subtask(agent=AgentName(item["agent"]), title=item["title"], instructions=item["instructions"], depends_on=item.get("depends_on", []), checkpoint=item.get("checkpoint", True))
         for item in payload["subtasks"]
