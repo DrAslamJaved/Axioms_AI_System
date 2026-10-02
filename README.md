@@ -41,9 +41,10 @@ real tool use and optional LLM synthesis:
   bibliographic candidates. Its metadata and citation counts are discovery
   signals only, not evidence of quality, publication status, or claim validity.
 - **Durable local dispatch** queues only approved local tasks in SQLite with an
-  idempotency key, atomic worker claim, bounded retry, and dead-letter state.
+  idempotency key, atomic leased worker claim, bounded retry, and dead-letter state.
   A manually invoked local worker runs deterministic drafts only; it cannot
-  perform external actions.
+  perform external actions. An expired worker lease requeues only the job within
+  its retry budget; task recovery remains a separate human-confirmed action.
 - **Versioned task graphs** attach a deterministic `routing.v1` graph and hash
   to every task. Dependencies are validated for missing nodes and cycles before
   approval. `parallel=true` may run only independent local draft nodes in a

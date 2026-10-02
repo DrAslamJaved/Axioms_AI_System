@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
@@ -36,6 +36,7 @@ class DispatchJob:
     max_attempts: int
     worker_id: str | None
     last_error: str | None
+    lease_expires_at: str | None
     created_at: str
     updated_at: str
 
@@ -60,11 +61,15 @@ class DurableDispatchStore:
                     max_attempts INTEGER NOT NULL,
                     worker_id TEXT,
                     last_error TEXT,
+                    lease_expires_at TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
                 """
             )
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(dispatch_jobs)")}
+            if "lease_expires_at" not in columns:
+                connection.execute("ALTER TABLE dispatch_jobs ADD COLUMN lease_expires_at TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, check_same_thread=False, timeout=5.0)
@@ -98,6 +103,7 @@ class DurableDispatchStore:
                 max_attempts=max_attempts,
                 worker_id=None,
                 last_error=None,
+                lease_expires_at=None,
                 created_at=now,
                 updated_at=now,
             )
@@ -105,8 +111,8 @@ class DurableDispatchStore:
                 """
                 INSERT INTO dispatch_jobs (
                     job_id, task_id, idempotency_key, status, attempts, max_attempts,
-                    worker_id, last_error, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    worker_id, last_error, lease_expires_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job.job_id,
@@ -117,6 +123,7 @@ class DurableDispatchStore:
                     job.max_attempts,
                     job.worker_id,
                     job.last_error,
+                    job.lease_expires_at,
                     job.created_at,
                     job.updated_at,
                 ),
@@ -128,12 +135,51 @@ class DurableDispatchStore:
             row = connection.execute("SELECT * FROM dispatch_jobs WHERE job_id = ?", (job_id,)).fetchone()
         return _job_from_row(row) if row is not None else None
 
-    def claim_next(self, worker_id: str) -> DispatchJob | None:
+    def claim_next(
+        self, worker_id: str, *, lease_seconds: int = 120, now: datetime | None = None
+    ) -> DispatchJob | None:
         worker = worker_id.strip()
         if not worker:
             raise ValueError("A worker ID is required.")
+        if not 30 <= lease_seconds <= 900:
+            raise ValueError("lease_seconds must be between 30 and 900.")
+        claimed_at = now or datetime.now(UTC)
+        claimed_at_text = claimed_at.isoformat()
+        lease_expires_at = (claimed_at + timedelta(seconds=lease_seconds)).isoformat()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                UPDATE dispatch_jobs
+                SET status = ?, worker_id = NULL, lease_expires_at = NULL,
+                    last_error = ?, updated_at = ?
+                WHERE status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?
+                    AND attempts < max_attempts
+                """,
+                (
+                    DispatchStatus.QUEUED.value,
+                    "Worker lease expired; job requeued.",
+                    claimed_at_text,
+                    DispatchStatus.CLAIMED.value,
+                    claimed_at_text,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE dispatch_jobs
+                SET status = ?, worker_id = NULL, lease_expires_at = NULL,
+                    last_error = ?, updated_at = ?
+                WHERE status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?
+                    AND attempts >= max_attempts
+                """,
+                (
+                    DispatchStatus.DEAD_LETTER.value,
+                    "Worker lease expired after retry budget.",
+                    claimed_at_text,
+                    DispatchStatus.CLAIMED.value,
+                    claimed_at_text,
+                ),
+            )
             row = connection.execute(
                 "SELECT * FROM dispatch_jobs WHERE status = ? ORDER BY created_at, job_id LIMIT 1",
                 (DispatchStatus.QUEUED.value,),
@@ -141,14 +187,20 @@ class DurableDispatchStore:
             if row is None:
                 return None
             job = _job_from_row(row)
-            now = _now()
             connection.execute(
                 """
                 UPDATE dispatch_jobs
-                SET status = ?, attempts = ?, worker_id = ?, updated_at = ?
+                SET status = ?, attempts = ?, worker_id = ?, lease_expires_at = ?, updated_at = ?
                 WHERE job_id = ?
                 """,
-                (DispatchStatus.CLAIMED.value, job.attempts + 1, worker, now, job.job_id),
+                (
+                    DispatchStatus.CLAIMED.value,
+                    job.attempts + 1,
+                    worker,
+                    lease_expires_at,
+                    claimed_at_text,
+                    job.job_id,
+                ),
             )
         return self.get(job.job_id)
 
@@ -187,7 +239,7 @@ class DurableDispatchStore:
             connection.execute(
                 """
                 UPDATE dispatch_jobs
-                SET status = ?, worker_id = NULL, last_error = ?, updated_at = ?
+                SET status = ?, worker_id = NULL, last_error = ?, lease_expires_at = NULL, updated_at = ?
                 WHERE job_id = ?
                 """,
                 (status.value, last_error, now, job_id),
@@ -211,6 +263,7 @@ def _job_from_row(row: sqlite3.Row) -> DispatchJob:
         max_attempts=row["max_attempts"],
         worker_id=row["worker_id"],
         last_error=row["last_error"],
+        lease_expires_at=row["lease_expires_at"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
