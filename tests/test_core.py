@@ -19,6 +19,8 @@ def test_task_creation_persists_a_plan_without_executing_agents(tmp_path: Path) 
     assert record.status is TaskStatus.PENDING_APPROVAL
     assert record.deliverables == []
     assert [step.kind for step in record.agent_trace] == [StepKind.PLAN_CREATED]
+    assert record.graph_version == "routing.v1"
+    assert record.graph_digest is not None
 
 
 def test_approved_task_executes_then_requires_final_review(tmp_path: Path) -> None:
