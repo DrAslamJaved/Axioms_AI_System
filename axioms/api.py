@@ -419,6 +419,21 @@ class SimilarityScreenIn(BaseModel):
         )
 
 
+class DispatchIn(BaseModel):
+    idempotency_key: str = Field(min_length=8, max_length=200)
+    max_attempts: int = Field(default=2, ge=1, le=3)
+
+
+class DispatchClaimIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=200)
+
+
+class DispatchFinishIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=200)
+    succeeded: bool
+    error: str | None = Field(default=None, max_length=2000)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     try:
@@ -825,6 +840,59 @@ def get_task(task_id: str) -> dict:
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+@app.post("/tasks/{task_id}/dispatch")
+def dispatch_approved_task(
+    task_id: str, payload: DispatchIn, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Queue an already-approved local task; no task execution starts in this request."""
+    try:
+        return core.enqueue_approved_task(
+            task_id,
+            idempotency_key=payload.idempotency_key,
+            max_attempts=payload.max_attempts,
+        ).to_dict()
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except (TaskStateError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get("/dispatch/jobs/{job_id}")
+def get_dispatch_job(job_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    job = core.dispatch_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Dispatch job not found")
+    return job.to_dict()
+
+
+@app.post("/dispatch/jobs/claim")
+def claim_dispatch_job(payload: DispatchClaimIn, _auth: None = Depends(require_api_key)) -> dict | None:
+    """Atomically claim one queued job for a named worker; this cannot execute an external action."""
+    try:
+        job = core.dispatch_store.claim_next(payload.worker_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return job.to_dict() if job is not None else None
+
+
+@app.post("/dispatch/jobs/{job_id}/finish")
+def finish_dispatch_job(
+    job_id: str, payload: DispatchFinishIn, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Record a worker outcome; failures are retried only within the fixed job budget."""
+    try:
+        return core.dispatch_store.finish(
+            job_id,
+            worker_id=payload.worker_id,
+            succeeded=payload.succeeded,
+            error=payload.error,
+        ).to_dict()
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Dispatch job not found") from error
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.post("/tasks/{task_id}/execute")
