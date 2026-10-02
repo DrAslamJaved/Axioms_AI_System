@@ -248,6 +248,34 @@ class DurableDispatchStore:
         assert result is not None
         return result
 
+    def renew_lease(
+        self, job_id: str, *, worker_id: str, lease_seconds: int = 120, now: datetime | None = None
+    ) -> DispatchJob:
+        """Extend only the named worker's still-valid local claim."""
+        worker = worker_id.strip()
+        if not worker:
+            raise ValueError("A worker ID is required.")
+        if not 30 <= lease_seconds <= 900:
+            raise ValueError("lease_seconds must be between 30 and 900.")
+        renewed_at = now or datetime.now(UTC)
+        renewed_at_text = renewed_at.isoformat()
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM dispatch_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise KeyError(job_id)
+            job = _job_from_row(row)
+            if job.status is not DispatchStatus.CLAIMED or job.worker_id != worker:
+                raise DispatchStateError("Only the worker holding a claimed job may renew its lease.")
+            if job.lease_expires_at is None or job.lease_expires_at <= renewed_at_text:
+                raise DispatchStateError("Job lease has expired and cannot be renewed.")
+            connection.execute(
+                "UPDATE dispatch_jobs SET lease_expires_at = ?, updated_at = ? WHERE job_id = ?",
+                ((renewed_at + timedelta(seconds=lease_seconds)).isoformat(), renewed_at_text, job_id),
+            )
+        result = self.get(job_id)
+        assert result is not None
+        return result
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
