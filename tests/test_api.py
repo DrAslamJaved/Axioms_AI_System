@@ -43,6 +43,7 @@ from axioms.api import (
     create_writing_draft_docx,
     decide_episodic_memory,
     decide_preference_proposal,
+    discover_arxiv_preprints,
     discover_research_sources,
     list_agents,
     list_personal_kb_entries,
@@ -54,7 +55,7 @@ from axioms.api import (
 from axioms.core import AxiomsCore
 from axioms.models import ApprovalDecision, TaskRequest
 from axioms.store import TaskStore
-from axioms.tools import TavilyClient
+from axioms.tools import ArxivClient, TavilyClient
 
 
 def lecture_payload() -> LecturePlanIn:
@@ -156,6 +157,17 @@ def test_research_discovery_handler_returns_unverified_candidates(monkeypatch) -
     body = discover_research_sources(ResearchDiscoveryIn(query="fuzzy similarity DTI literature"))
     assert body["sources"][0]["title"] == "Candidate source"
     assert "unverified candidates" in body["verification_boundary"]
+
+
+def test_arxiv_discovery_handler_returns_unverified_preprint_candidates(monkeypatch) -> None:
+    feed = """<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+    <id>http://arxiv.org/abs/2601.01234v1</id><title>Candidate preprint</title>
+    <summary>Candidate summary.</summary><author><name>A. Researcher</name></author>
+    </entry></feed>"""
+    monkeypatch.setattr(api, "_arxiv_client", lambda: ArxivClient(fetch=lambda url: feed))
+    body = discover_arxiv_preprints(ResearchDiscoveryIn(query="fuzzy similarity DTI literature"))
+    assert body["candidates"][0]["title"] == "Candidate preprint"
+    assert "preprint candidates" in body["verification_boundary"]
 
 
 def test_episodic_memory_handlers_require_a_second_approval(tmp_path: Path, monkeypatch) -> None:

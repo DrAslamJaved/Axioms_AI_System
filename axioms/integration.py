@@ -41,6 +41,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent("LLM provider seam", IntegrationState.IMPLEMENTED, "Pluggable Anthropic/OpenAI backends with DisabledProvider safe default. Optional dependency."),
         IntegrationComponent("Crossref DOI verification", IntegrationState.IMPLEMENTED, "Real external metadata verification tool with injectable transport for offline testing."),
         IntegrationComponent("Tavily evidence discovery", IntegrationState.IMPLEMENTED, "Read-only search candidates with provenance and an explicit verification boundary; disabled until configured."),
+        IntegrationComponent(
+            "arXiv preprint discovery",
+            IntegrationState.IMPLEMENTED,
+            "Read-only Atom discovery with bounded results, in-process cache, rate gate, provenance, and an explicit preprint-verification boundary.",
+        ),
         IntegrationComponent("Agentic research agent", IntegrationState.IMPLEMENTED, "Tool-using, LLM-synthesising research vertical with bounded generation and AutoEval guardrail."),
         IntegrationComponent(
             "Agentic assessment design",

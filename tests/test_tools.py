@@ -1,6 +1,8 @@
 import pytest
 
 from axioms.tools import (
+    ArxivClient,
+    ArxivError,
     CrossrefClient,
     CrossrefError,
     TavilyClient,
@@ -8,6 +10,19 @@ from axioms.tools import (
     title_similarity,
     titles_match,
 )
+
+ARXIV_FEED = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2601.01234v1</id>
+    <updated>2026-01-10T12:00:00Z</updated>
+    <published>2026-01-09T12:00:00Z</published>
+    <title> Fuzzy Similarity for DTI Prediction </title>
+    <summary> A preprint candidate summary. </summary>
+    <author><name>A. Javed</name></author>
+    <category term="cs.LG" />
+  </entry>
+</feed>"""
 
 
 def _message(title: str, work_type: str = "journal-article", year: int = 2026) -> dict:
@@ -115,3 +130,34 @@ def test_tavily_discovery_rejects_invalid_query_and_response() -> None:
         TavilyClient("test-key", fetch=lambda url, payload: {}).discover("short")
     with pytest.raises(TavilyError, match="no usable"):
         TavilyClient("test-key", fetch=lambda url, payload: {}).discover("fuzzy similarity DTI prediction")
+
+
+def test_arxiv_discovery_returns_unverified_preprint_candidates_and_caches_result() -> None:
+    captured: dict[str, object] = {}
+
+    def fetch(url: str) -> str:
+        captured["url"] = url
+        return ARXIV_FEED
+
+    client = ArxivClient(fetch=fetch, clock=lambda: 100.0)
+    first = client.discover("fuzzy similarity DTI prediction")
+    second = client.discover("fuzzy similarity DTI prediction")
+    assert "export.arxiv.org/api/query" in str(captured["url"])
+    assert "max_results=5" in str(captured["url"])
+    assert first.candidates[0].arxiv_id == "2601.01234v1"
+    assert first.candidates[0].abstract_url == "https://arxiv.org/abs/2601.01234v1"
+    assert first.candidates[0].categories == ("cs.LG",)
+    assert not first.cached
+    assert second.cached
+    assert "preprint candidates" in first.verification_boundary
+
+
+def test_arxiv_discovery_rate_limits_distinct_live_queries_and_rejects_bad_xml() -> None:
+    now = [100.0]
+    client = ArxivClient(fetch=lambda url: ARXIV_FEED, clock=lambda: now[0])
+    client.discover("fuzzy similarity DTI prediction")
+    with pytest.raises(ArxivError, match="rate limited"):
+        client.discover("spectral graph theory literature")
+    bad_xml_client = ArxivClient(fetch=lambda url: "not xml", clock=lambda: 100.0)
+    with pytest.raises(ArxivError, match="malformed"):
+        bad_xml_client.discover("fuzzy similarity DTI prediction")
