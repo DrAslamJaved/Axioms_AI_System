@@ -74,12 +74,13 @@ from axioms.social_media_agent import (
 )
 from axioms.social_media_agent import export_docx as export_social_media_docx
 from axioms.social_media_agent_ai import run_agentic_social_media_review
-from axioms.tools import CrossrefClient, TavilyClient, TavilyError
+from axioms.tools import ArxivClient, ArxivError, CrossrefClient, TavilyClient, TavilyError
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
 app = FastAPI(title="Axioms AI System", version="0.2.0")
 core = AxiomsCore()
+_ARXIV_CLIENT = ArxivClient()
 
 DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -90,6 +91,11 @@ def _crossref_client() -> CrossrefClient:
 
 def _tavily_client() -> TavilyClient:
     return TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+
+
+def _arxiv_client() -> ArxivClient:
+    """Keep the small in-process arXiv cache and rate gate across API requests."""
+    return _ARXIV_CLIENT
 
 
 def _docx_response(write: Callable[[Path], None], filename: str, background: BackgroundTasks) -> FileResponse:
@@ -560,6 +566,15 @@ def discover_research_sources(payload: ResearchDiscoveryIn, _auth: None = Depend
     try:
         return _tavily_client().discover(payload.query, max_results=payload.max_results).to_dict()
     except TavilyError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/research/discover/arxiv")
+def discover_arxiv_preprints(payload: ResearchDiscoveryIn, _auth: None = Depends(require_api_key)) -> dict:
+    """Return cached, rate-limited, read-only arXiv preprint candidates for later verification."""
+    try:
+        return _arxiv_client().discover(payload.query, max_results=payload.max_results).to_dict()
+    except ArxivError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
 
