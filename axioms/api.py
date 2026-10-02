@@ -29,6 +29,7 @@ from axioms.autoeval_agent import (
 from axioms.autoeval_agent import export_docx as export_autoeval_docx
 from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, build_content_package
 from axioms.content_agent import export_docx as export_content_docx
+from axioms.content_agent_ai import run_agentic_content_review
 from axioms.core import AxiomsCore, BlockedApprovalError, TaskStateError
 from axioms.episodic_memory import MemoryDecision
 from axioms.integration import build_system_readiness_report
@@ -654,6 +655,19 @@ def create_assessment_instructor_docx(
 def create_content_package(payload: ContentPackageIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_content_package(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/content-packages/agentic")
+def create_agentic_content_review(payload: ContentPackageIn, _auth: None = Depends(require_api_key)) -> dict:
+    """Generate an internal editorial review with a safe disabled-LLM fallback."""
+    try:
+        provider = get_provider()
+    except LLMConfigurationError as error:
+        raise HTTPException(status_code=503, detail=f"LLM provider misconfigured: {error}") from error
+    try:
+        return run_agentic_content_review(payload.to_agent_request(), provider=provider).to_dict()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
