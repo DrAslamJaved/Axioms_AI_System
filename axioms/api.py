@@ -68,7 +68,7 @@ from axioms.social_media_agent import (
     build_social_media_package,
 )
 from axioms.social_media_agent import export_docx as export_social_media_docx
-from axioms.tools import CrossrefClient
+from axioms.tools import CrossrefClient, TavilyClient, TavilyError
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
@@ -80,6 +80,10 @@ DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 
 def _crossref_client() -> CrossrefClient:
     return CrossrefClient(mailto=os.getenv("CROSSREF_MAILTO") or None)
+
+
+def _tavily_client() -> TavilyClient:
+    return TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 
 def _docx_response(write: Callable[[Path], None], filename: str, background: BackgroundTasks) -> FileResponse:
@@ -186,6 +190,11 @@ class ResearchBriefIn(BaseModel):
             sources=tuple(source.to_evidence_source() for source in self.sources),
             analysis_dimensions=tuple(self.analysis_dimensions),
         )
+
+
+class ResearchDiscoveryIn(BaseModel):
+    query: str = Field(min_length=8, max_length=2000)
+    max_results: int = Field(default=5, ge=1, le=10)
 
 
 class LearningOutcomeIn(BaseModel):
@@ -457,6 +466,15 @@ def create_research_brief(payload: ResearchBriefIn, _auth: None = Depends(requir
         return build_research_brief(payload.to_agent_request()).to_dict()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/research/discover")
+def discover_research_sources(payload: ResearchDiscoveryIn, _auth: None = Depends(require_api_key)) -> dict:
+    """Return read-only, unverified evidence candidates from Tavily."""
+    try:
+        return _tavily_client().discover(payload.query, max_results=payload.max_results).to_dict()
+    except TavilyError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @app.post("/research-briefs/agentic")

@@ -3,6 +3,8 @@ import pytest
 from axioms.tools import (
     CrossrefClient,
     CrossrefError,
+    TavilyClient,
+    TavilyError,
     title_similarity,
     titles_match,
 )
@@ -67,3 +69,49 @@ def test_title_similarity_is_punctuation_and_case_insensitive() -> None:
     assert title_similarity("Graph Spectra!", "graph spectra") == 1.0
     assert titles_match("Fuzzy similarity measures for DDI", "Fuzzy Similarity Measures for DDI")
     assert not titles_match("Totally different", "Nothing alike at all")
+
+
+def test_tavily_discovery_returns_only_https_candidate_sources() -> None:
+    captured: dict[str, object] = {}
+
+    def fetch(url: str, payload: dict) -> dict:
+        captured["url"] = url
+        captured["payload"] = payload
+        return {
+            "results": [
+                {
+                    "title": "Fuzzy similarity for DTI prediction",
+                    "url": "https://example.org/paper",
+                    "content": "A candidate source summary.",
+                    "score": 0.91,
+                    "published_date": "2026-01-10",
+                },
+                {"title": "Discarded insecure result", "url": "http://example.org/insecure"},
+            ]
+        }
+
+    result = TavilyClient("test-key", fetch=fetch).discover("fuzzy similarity DTI prediction")
+    assert captured["url"] == "https://api.tavily.com/search"
+    assert captured["payload"] == {
+        "api_key": "test-key",
+        "query": "fuzzy similarity DTI prediction",
+        "search_depth": "advanced",
+        "max_results": 5,
+        "include_answer": False,
+        "include_raw_content": False,
+        "topic": "general",
+    }
+    assert [source.title for source in result.sources] == ["Fuzzy similarity for DTI prediction"]
+    assert "unverified candidates" in result.verification_boundary
+
+
+def test_tavily_discovery_fails_closed_without_a_key() -> None:
+    with pytest.raises(TavilyError, match="not configured"):
+        TavilyClient(None, fetch=lambda url, payload: {}).discover("fuzzy similarity DTI prediction")
+
+
+def test_tavily_discovery_rejects_invalid_query_and_response() -> None:
+    with pytest.raises(TavilyError, match="at least 8"):
+        TavilyClient("test-key", fetch=lambda url, payload: {}).discover("short")
+    with pytest.raises(TavilyError, match="no usable"):
+        TavilyClient("test-key", fetch=lambda url, payload: {}).discover("fuzzy similarity DTI prediction")

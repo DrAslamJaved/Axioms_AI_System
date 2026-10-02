@@ -40,6 +40,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent("API-key authentication", IntegrationState.IMPLEMENTED, "Named multi-key and single-key modes with principal resolution for authenticated approver identity."),
         IntegrationComponent("LLM provider seam", IntegrationState.IMPLEMENTED, "Pluggable Anthropic/OpenAI backends with DisabledProvider safe default. Optional dependency."),
         IntegrationComponent("Crossref DOI verification", IntegrationState.IMPLEMENTED, "Real external metadata verification tool with injectable transport for offline testing."),
+        IntegrationComponent("Tavily evidence discovery", IntegrationState.IMPLEMENTED, "Read-only search candidates with provenance and an explicit verification boundary; disabled until configured."),
         IntegrationComponent("Agentic research agent", IntegrationState.IMPLEMENTED, "Tool-using, LLM-synthesising research vertical with bounded generation and AutoEval guardrail."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
         IntegrationComponent("Redis Streams dispatch", IntegrationState.DEFERRED, "Requires idempotency, retry, dead-letter, trace, and operational tests."),

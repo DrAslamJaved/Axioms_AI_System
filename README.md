@@ -18,6 +18,9 @@ real tool use and optional LLM synthesis:
   external bibliographic registry), synthesises verified claims through a
   constrained LLM prompt, and runs the output through an AutoEval guardrail —
   all captured in an auditable agent trace.
+- **Research discovery** can use Tavily as a bounded, read-only search tool to
+  collect unverified source candidates with retrieval provenance. Candidates
+  cannot be cited or synthesised until they pass the existing verification flow.
 - **API-key authentication** with named-key principal resolution, so approver
   identity is derived from the authenticated key rather than self-asserted.
 - **LLM provider seam** supporting Anthropic, OpenAI, or disabled (the safe
@@ -86,6 +89,7 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | `ANTHROPIC_API_KEY` | Required when provider is `anthropic` | — |
 | `OPENAI_API_KEY` | Required when provider is `openai` | — |
 | `CROSSREF_MAILTO` | Polite Crossref identification (recommended) | unset |
+| `TAVILY_API_KEY` | Enables read-only research discovery | unset (disabled) |
 
 To enable LLM-powered synthesis in the agentic research agent, install the
 optional dependencies: `pip install -e ".[agentic]"`.
@@ -120,6 +124,12 @@ curl -X POST http://127.0.0.1:8000/research-briefs/agentic \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
   -d @research_request.json
+
+# Discover unverified research candidates (requires TAVILY_API_KEY)
+curl -X POST http://127.0.0.1:8000/research/discover \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"query":"fuzzy similarity methods for drug-target interaction prediction", "max_results":5}'
 ```
 
 Use `GET /tasks/{task_id}` to inspect the plan, lifecycle state, drafts, and agent trace.
@@ -134,6 +144,7 @@ Use `GET /system/readiness` for a full component report.
 | Writing & Communication | `POST /writing-drafts` | `POST /writing-drafts/docx` |
 | Research (deterministic) | `POST /research-briefs` | `POST /research-briefs/docx` |
 | Research (agentic) | `POST /research-briefs/agentic` | — |
+| Research discovery (read-only) | `POST /research/discover` | — |
 | Assessment Design | `POST /assessment-blueprints` | student + instructor DOCX |
 | Content Creation | `POST /content-packages` | `POST /content-packages/docx` |
 | Social Media | `POST /social-media-packages` | `POST /social-media-packages/docx` |
@@ -144,7 +155,7 @@ Use `GET /system/readiness` for a full component report.
 
 `GET /agents` lists the implemented specialist capabilities. `GET /system/readiness`
 returns a truthful component report — implemented components (Core runtime,
-authentication, LLM seam, Crossref tool, agentic research, local deployment) and
+authentication, LLM seam, Crossref tool, Tavily discovery, agentic research, local deployment) and
 deferred infrastructure (Redis, semantic retrieval, LangGraph, external connectors,
 cloud deployment).
 
