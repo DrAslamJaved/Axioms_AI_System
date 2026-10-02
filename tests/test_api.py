@@ -20,6 +20,7 @@ from axioms.api import (
     WritingDraftIn,
     create_agentic_assessment_blueprint,
     create_agentic_content_review,
+    create_agentic_portfolio_review,
     create_agentic_social_media_review,
     create_assessment_blueprint,
     create_assessment_instructor_docx,
@@ -325,6 +326,15 @@ def portfolio_payload() -> PortfolioPackageIn:
 def test_portfolio_handler_returns_review_only_package() -> None:
     body = create_portfolio_package(portfolio_payload())
     assert body["approval_required"]
+    assert body["github_action_blocked"]
+
+
+def test_agentic_portfolio_handler_safely_degrades_when_llm_is_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "disabled")
+    body = create_agentic_portfolio_review(portfolio_payload())
+    assert not body["generation_enabled"]
+    assert body["portfolio_review"] is None
+    assert body["human_approval_required"]
     assert body["github_action_blocked"]
 
 

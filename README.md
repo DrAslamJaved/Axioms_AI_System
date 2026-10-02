@@ -28,6 +28,9 @@ real tool use and optional LLM synthesis:
 - **Agentic social-media review** retains deterministic platform drafts and can
   add a bounded internal editorial review. It cannot schedule, upload, publish,
   message, or authorize activity on any social platform.
+- **Agentic portfolio review** retains an evidence-bound portfolio package and
+  can add a bounded readiness review. It cannot create repositories, change
+  repository visibility, commit, push, deploy, or publish anything.
 - **Research discovery** can use Tavily as a bounded, read-only search tool to
   collect unverified source candidates with retrieval provenance. Candidates
   cannot be cited or synthesised until they pass the existing verification flow.
@@ -180,7 +183,7 @@ Use `GET /system/readiness` for a full component report.
 | Assessment Design | `POST /assessment-blueprints`; `POST /assessment-blueprints/agentic` | student + instructor DOCX; instructor-only review |
 | Content Creation | `POST /content-packages`; `POST /content-packages/agentic` | `POST /content-packages/docx`; internal editorial review |
 | Social Media | `POST /social-media-packages`; `POST /social-media-packages/agentic` | `POST /social-media-packages/docx`; internal editorial review |
-| STEM AI Portfolio | `POST /portfolio-packages` | `POST /portfolio-packages/docx` |
+| STEM AI Portfolio | `POST /portfolio-packages`; `POST /portfolio-packages/agentic` | `POST /portfolio-packages/docx`; internal readiness review |
 | AutoEval | `POST /autoeval-reports` | `POST /autoeval-reports/docx` |
 
 ## System integration and readiness

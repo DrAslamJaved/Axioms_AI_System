@@ -53,6 +53,7 @@ from axioms.portfolio_agent import (
     build_portfolio_package,
 )
 from axioms.portfolio_agent import export_docx as export_portfolio_docx
+from axioms.portfolio_agent_ai import run_agentic_portfolio_review
 from axioms.research_agent import (
     EvidenceSource,
     PublicationKind,
@@ -724,6 +725,21 @@ def create_social_media_package_docx(
 def create_portfolio_package(payload: PortfolioPackageIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_portfolio_package(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/portfolio-packages/agentic")
+def create_agentic_portfolio_review(
+    payload: PortfolioPackageIn, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Generate an internal readiness review; this endpoint cannot act on GitHub."""
+    try:
+        provider = get_provider()
+    except LLMConfigurationError as error:
+        raise HTTPException(status_code=503, detail=f"LLM provider misconfigured: {error}") from error
+    try:
+        return run_agentic_portfolio_review(payload.to_agent_request(), provider=provider).to_dict()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
