@@ -60,6 +60,7 @@ class StepKind(StrEnum):
     DISPATCH_QUEUED = "dispatch_queued"
     DISPATCH_EXECUTION_STARTED = "dispatch_execution_started"
     DISPATCH_RETRY_SCHEDULED = "dispatch_retry_scheduled"
+    CROSS_AGENT_AUTOEVAL_CREATED = "cross_agent_autoeval_created"
 
 
 @dataclass(slots=True)
