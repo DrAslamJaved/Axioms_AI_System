@@ -8,8 +8,9 @@ Axioms is a **genuinely agentic** academic-AI system. It combines deterministic
 governance (typed task plans, risk-tier classification, human approval gates) with
 real tool use and optional LLM synthesis:
 
-- **Axioms Core** converts an approved request into a typed task plan with
-  risk-tier classification (LOW / ELEVATED / HIGH) and blocking enforcement.
+- **Axioms Core runtime** persists a typed task plan, records an approval, runs
+  bounded local drafting, and returns the resulting drafts for final human review.
+  Each lifecycle transition and agent dispatch is recorded in an auditable trace.
 - **Eight specialist agents** produce review-first drafts: lecture plans, writing
   drafts, evidence-first research briefs, assessment blueprints, content packages,
   social-media drafts, portfolio plans, and AutoEval quality reports.
@@ -35,14 +36,15 @@ data-governance issue to be resolved before approval can proceed.
 flowchart TD
   U["Professor request"] --> C["Axioms Core"]
   C --> P["Risk-classified task plan"]
-  P --> L["Specialist agents"]
+  P --> G["Human execution approval"]
+  G --> L["Specialist agents"]
   P --> R["Agentic research agent"]
   R --> CR["Crossref verification"]
   R --> LLM["LLM synthesis (optional)"]
   R --> AE["AutoEval guardrail"]
-  L --> A["Approval gate (blocking-aware)"]
+  L --> A["Final human review"]
   AE --> A
-  A --> D["Approved delivery"]
+  A --> D["Approved local delivery"]
   C <--> M["SQLite episode + PKB store"]
   C <--> Auth["API-key authentication"]
 ```
@@ -97,11 +99,21 @@ curl -X POST http://127.0.0.1:8000/tasks \
   -H "X-API-Key: your-secret" \
   -d '{"goal":"Prepare a 75-minute graduate lecture on spectral graph theory", "audience":"MS mathematics"}'
 
-# Approve with named approver (required)
+# Approve task execution with named approver (required)
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
   -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Reviewed"}'
+
+# Run the approved local plan. This creates review-only drafts; it performs no external action.
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/execute \
+  -H "X-API-Key: your-secret"
+
+# Approve or reject the resulting drafts in a final human review.
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Final review complete"}'
 
 # Run the agentic research agent (works with or without an LLM configured)
 curl -X POST http://127.0.0.1:8000/research-briefs/agentic \
@@ -110,7 +122,7 @@ curl -X POST http://127.0.0.1:8000/research-briefs/agentic \
   -d @research_request.json
 ```
 
-Use `GET /tasks/{task_id}` to inspect the plan and drafts.
+Use `GET /tasks/{task_id}` to inspect the plan, lifecycle state, drafts, and agent trace.
 Use `GET /health` to verify authentication posture and provider status.
 Use `GET /system/readiness` for a full component report.
 
@@ -131,7 +143,7 @@ Use `GET /system/readiness` for a full component report.
 ## System integration and readiness
 
 `GET /agents` lists the implemented specialist capabilities. `GET /system/readiness`
-returns a truthful component report — implemented components (Core routing,
+returns a truthful component report — implemented components (Core runtime,
 authentication, LLM seam, Crossref tool, agentic research, local deployment) and
 deferred infrastructure (Redis, semantic retrieval, LangGraph, external connectors,
 cloud deployment).
