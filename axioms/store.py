@@ -42,8 +42,24 @@ class TaskStore:
                 (record.task_id, payload),
             )
 
+    def save_if_status(self, record: TaskRecord, expected_status: str) -> bool:
+        """Persist a record only when its stored lifecycle status has not changed.
+
+        This small compare-and-swap primitive prevents a running executor from
+        overwriting a cancellation request made at a graph-layer checkpoint.
+        """
+        payload = json.dumps(record.to_dict())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT payload FROM tasks WHERE task_id = ?", (record.task_id,)
+            ).fetchone()
+            if row is None or json.loads(row[0]).get("status") != expected_status:
+                return False
+            connection.execute("UPDATE tasks SET payload = ? WHERE task_id = ?", (payload, record.task_id))
+        return True
+
     def get(self, task_id: str) -> dict | None:
         with self._connect() as connection:
             row = connection.execute("SELECT payload FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return json.loads(row[0]) if row else None
-
