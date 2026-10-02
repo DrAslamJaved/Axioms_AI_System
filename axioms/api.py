@@ -20,6 +20,7 @@ from axioms.assessment_agent import (
     export_instructor_docx,
     export_student_docx,
 )
+from axioms.assessment_agent_ai import run_agentic_assessment_design
 from axioms.autoeval_agent import (
     AutoEvalRequest,
     EvaluatedAgent,
@@ -604,6 +605,21 @@ def create_research_bibtex(payload: ResearchBriefIn, _auth: None = Depends(requi
 def create_assessment_blueprint(payload: AssessmentBlueprintIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
         return build_assessment_blueprint(payload.to_agent_request()).to_dict()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/assessment-blueprints/agentic")
+def create_agentic_assessment_blueprint(
+    payload: AssessmentBlueprintIn, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Generate an instructor-only assessment review with a safe disabled-LLM fallback."""
+    try:
+        provider = get_provider()
+    except LLMConfigurationError as error:
+        raise HTTPException(status_code=503, detail=f"LLM provider misconfigured: {error}") from error
+    try:
+        return run_agentic_assessment_design(payload.to_agent_request(), provider=provider).to_dict()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
