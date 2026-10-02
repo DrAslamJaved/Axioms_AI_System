@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import BackgroundTasks
 
 from axioms import api
+from axioms import core as core_module
 from axioms.api import (
     AssessmentBlueprintIn,
     AutoEvalReportIn,
@@ -16,6 +17,7 @@ from axioms.api import (
     PortfolioPackageIn,
     PreferenceProposalIn,
     ProposalDecisionIn,
+    RecoveryIn,
     ResearchBriefIn,
     ResearchDiscoveryIn,
     SimilarityScreenIn,
@@ -54,6 +56,7 @@ from axioms.api import (
     list_agents,
     list_personal_kb_entries,
     propose_episodic_memory,
+    recover_task,
     run_one_dispatch_job,
     search_episodic_memory,
     similarity_screen,
@@ -98,6 +101,27 @@ def test_cancel_handler_stops_an_approved_task(tmp_path: Path, monkeypatch) -> N
     )
 
     assert cancelled["status"] == TaskStatus.CANCELLED.value
+
+
+def test_recovery_handler_requires_attestation_and_returns_to_pending_approval(
+    tmp_path: Path, monkeypatch
+) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    payload = test_core.store.get(record.task_id)
+    assert payload is not None
+    payload["status"] = TaskStatus.RUNNING.value
+    test_core.store.save(core_module._record_from_payload(payload))
+
+    recovered = recover_task(
+        record.task_id,
+        RecoveryIn(recovered_by="Dr Aslam", confirm_execution_stopped=True),
+        principal=None,
+    )
+
+    assert recovered["status"] == TaskStatus.PENDING_APPROVAL.value
 
 
 def test_lecture_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
