@@ -61,6 +61,7 @@ from axioms.research_agent import (
 from axioms.research_agent import export_docx as export_research_docx
 from axioms.research_agent_ai import run_agentic_research_brief
 from axioms.security import auth_mode, require_api_key, resolve_principal
+from axioms.similarity import ComparisonText, SimilarityRequest, screen_similarity
 from axioms.social_media_agent import (
     RecentSocialPost,
     SocialMediaRequest,
@@ -366,6 +367,29 @@ class MemoryDecisionIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class ComparisonTextIn(BaseModel):
+    reference_id: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=50000)
+
+    def to_comparison_text(self) -> ComparisonText:
+        return ComparisonText(**self.model_dump())
+
+
+class SimilarityScreenIn(BaseModel):
+    submitted_text: str = Field(min_length=1, max_length=100000)
+    comparison_texts: list[ComparisonTextIn] = Field(min_length=1, max_length=50)
+    shingle_size: int = Field(default=3, ge=1, le=8)
+    review_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
+
+    def to_similarity_request(self) -> SimilarityRequest:
+        return SimilarityRequest(
+            submitted_text=self.submitted_text,
+            comparison_texts=tuple(item.to_comparison_text() for item in self.comparison_texts),
+            shingle_size=self.shingle_size,
+            review_threshold=self.review_threshold,
+        )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     try:
@@ -462,6 +486,15 @@ def search_episodic_memory(
 ) -> list[dict]:
     try:
         return core.recall_episodic_memory(query, limit=limit)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/similarity/screen")
+def similarity_screen(payload: SimilarityScreenIn, _auth: None = Depends(require_api_key)) -> dict:
+    """Screen supplied texts locally and return review signals, never an originality verdict."""
+    try:
+        return screen_similarity(payload.to_similarity_request()).to_dict()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
