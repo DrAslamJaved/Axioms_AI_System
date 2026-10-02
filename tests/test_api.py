@@ -8,6 +8,7 @@ from axioms.api import (
     AutoEvalReportIn,
     ContentPackageIn,
     DispatchIn,
+    DispatchRunIn,
     FeedbackIn,
     LecturePlanIn,
     MemoryDecisionIn,
@@ -51,6 +52,7 @@ from axioms.api import (
     list_agents,
     list_personal_kb_entries,
     propose_episodic_memory,
+    run_one_dispatch_job,
     search_episodic_memory,
     similarity_screen,
     system_readiness,
@@ -221,6 +223,18 @@ def test_dispatch_handler_queues_only_an_approved_task(tmp_path: Path, monkeypat
     body = dispatch_approved_task(record.task_id, DispatchIn(idempotency_key="api-dispatch-001"))
     assert body["task_id"] == record.task_id
     assert body["status"] == "queued"
+
+
+def test_dispatch_run_handler_executes_only_a_claimed_approved_local_job(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "worker.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    dispatch_approved_task(record.task_id, DispatchIn(idempotency_key="api-worker-001"))
+    body = run_one_dispatch_job(DispatchRunIn(worker_id="local-api-worker"))
+    assert body is not None
+    assert body["job"]["status"] == "succeeded"
+    assert body["task"]["status"] == "awaiting_review"
 
 
 def test_similarity_screen_handler_returns_a_review_signal_not_a_verdict() -> None:
