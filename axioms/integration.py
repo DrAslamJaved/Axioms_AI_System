@@ -97,7 +97,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "A named operator can attest that local execution stopped, discard any partial work, and return a stranded task to pending approval for a fresh decision.",
         ),
-        IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries are retained only after a separate owner decision."),
+        IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries are retained only after a separate owner decision; an owner can delete a searchable entry while a minimal tombstone records the deletion."),
         IntegrationComponent("Similarity screening", IntegrationState.IMPLEMENTED, "Local token-shingle comparison against supplied texts; produces human-review signals, never a plagiarism verdict."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
         IntegrationComponent("Redis Streams dispatch", IntegrationState.DEFERRED, "Requires distributed-worker deployment, leases, delayed retry, recovery, metrics, and operational tests."),
