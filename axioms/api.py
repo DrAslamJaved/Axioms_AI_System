@@ -432,6 +432,11 @@ class DispatchFinishIn(BaseModel):
     worker_id: str = Field(min_length=2, max_length=200)
     succeeded: bool
     error: str | None = Field(default=None, max_length=2000)
+    retryable: bool = True
+
+
+class DispatchRunIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=200)
 
 
 @app.get("/health")
@@ -888,11 +893,21 @@ def finish_dispatch_job(
             worker_id=payload.worker_id,
             succeeded=payload.succeeded,
             error=payload.error,
+            retryable=payload.retryable,
         ).to_dict()
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Dispatch job not found") from error
     except (ValueError, RuntimeError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post("/dispatch/run-one")
+def run_one_dispatch_job(payload: DispatchRunIn, _auth: None = Depends(require_api_key)) -> dict | None:
+    """Run one claimed, already-approved task using local deterministic drafting only."""
+    try:
+        return core.run_one_dispatched_task(payload.worker_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/tasks/{task_id}/execute")
