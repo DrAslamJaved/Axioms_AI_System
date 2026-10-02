@@ -47,6 +47,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "Bounded LLM instructor review over deterministic, source-scoped blueprints; outcome-reference guardrail and student release remain blocked.",
         ),
+        IntegrationComponent(
+            "Agentic content creation",
+            IntegrationState.IMPLEMENTED,
+            "Bounded LLM editorial review over deterministic content packages; outcome-reference guardrail and publication remain blocked.",
+        ),
         IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries are retained only after a separate owner decision."),
         IntegrationComponent("Similarity screening", IntegrationState.IMPLEMENTED, "Local token-shingle comparison against supplied texts; produces human-review signals, never a plagiarism verdict."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
