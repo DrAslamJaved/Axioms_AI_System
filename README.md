@@ -37,6 +37,9 @@ real tool use and optional LLM synthesis:
 - **arXiv discovery** adds cached, rate-limited, read-only preprint candidates
   with Atom provenance. A preprint is neither peer-reviewed evidence nor a
   verified claim and remains ineligible for synthesis until separately checked.
+- **Semantic Scholar discovery** adds keyed, cached, rate-limited, read-only
+  bibliographic candidates. Its metadata and citation counts are discovery
+  signals only, not evidence of quality, publication status, or claim validity.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -183,6 +186,7 @@ Use `GET /system/readiness` for a full component report.
 | Research (agentic) | `POST /research-briefs/agentic` | — |
 | Research discovery (read-only) | `POST /research/discover` | — |
 | arXiv preprint discovery (read-only) | `POST /research/discover/arxiv` | — |
+| Semantic Scholar discovery (read-only) | `POST /research/discover/semantic-scholar` | — |
 | Similarity screening (local review signal) | `POST /similarity/screen` | — |
 | Assessment Design | `POST /assessment-blueprints`; `POST /assessment-blueprints/agentic` | student + instructor DOCX; instructor-only review |
 | Content Creation | `POST /content-packages`; `POST /content-packages/agentic` | `POST /content-packages/docx`; internal editorial review |
@@ -194,7 +198,7 @@ Use `GET /system/readiness` for a full component report.
 
 `GET /agents` lists the implemented specialist capabilities. `GET /system/readiness`
 returns a truthful component report — implemented components (Core runtime,
-authentication, LLM seam, Crossref tool, Tavily and arXiv discovery, agentic research, local deployment) and
+authentication, LLM seam, Crossref tool, Tavily/arXiv/Semantic Scholar discovery, agentic research, local deployment) and
 deferred infrastructure (Redis, semantic retrieval, LangGraph, external connectors,
 cloud deployment).
 

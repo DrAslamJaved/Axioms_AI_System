@@ -46,6 +46,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "Read-only Atom discovery with bounded results, in-process cache, rate gate, provenance, and an explicit preprint-verification boundary.",
         ),
+        IntegrationComponent(
+            "Semantic Scholar discovery",
+            IntegrationState.IMPLEMENTED,
+            "Keyed, read-only bibliographic discovery with bounded results, in-process cache, rate gate, provenance, and independent-verification boundary.",
+        ),
         IntegrationComponent("Agentic research agent", IntegrationState.IMPLEMENTED, "Tool-using, LLM-synthesising research vertical with bounded generation and AutoEval guardrail."),
         IntegrationComponent(
             "Agentic assessment design",

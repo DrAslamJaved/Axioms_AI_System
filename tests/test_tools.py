@@ -5,6 +5,8 @@ from axioms.tools import (
     ArxivError,
     CrossrefClient,
     CrossrefError,
+    SemanticScholarClient,
+    SemanticScholarError,
     TavilyClient,
     TavilyError,
     title_similarity,
@@ -23,6 +25,23 @@ ARXIV_FEED = """<?xml version="1.0" encoding="UTF-8"?>
     <category term="cs.LG" />
   </entry>
 </feed>"""
+
+SEMANTIC_SCHOLAR_RESPONSE = {
+    "data": [
+        {
+            "paperId": "paper-001",
+            "title": "Fuzzy Similarity for DTI Prediction",
+            "authors": [{"name": "A. Javed"}],
+            "url": "https://www.semanticscholar.org/paper/paper-001",
+            "abstract": "Candidate abstract.",
+            "year": 2026,
+            "venue": "Example Venue",
+            "externalIds": {"DOI": "10.1000/example.doi"},
+            "publicationTypes": ["JournalArticle"],
+            "citationCount": 12,
+        }
+    ]
+}
 
 
 def _message(title: str, work_type: str = "journal-article", year: int = 2026) -> dict:
@@ -161,3 +180,39 @@ def test_arxiv_discovery_rate_limits_distinct_live_queries_and_rejects_bad_xml()
     bad_xml_client = ArxivClient(fetch=lambda url: "not xml", clock=lambda: 100.0)
     with pytest.raises(ArxivError, match="malformed"):
         bad_xml_client.discover("fuzzy similarity DTI prediction")
+
+
+def test_semantic_scholar_discovery_is_keyed_bounded_and_cached() -> None:
+    captured: dict[str, object] = {}
+
+    def fetch(url: str, headers: dict[str, str]) -> dict:
+        captured["url"] = url
+        captured["headers"] = headers
+        return SEMANTIC_SCHOLAR_RESPONSE
+
+    client = SemanticScholarClient("test-key", fetch=fetch, clock=lambda: 100.0)
+    first = client.discover("fuzzy similarity DTI prediction")
+    second = client.discover("fuzzy similarity DTI prediction")
+    assert "graph/v1/paper/search" in str(captured["url"])
+    assert "limit=5" in str(captured["url"])
+    assert captured["headers"] == {
+        "User-Agent": "AxiomsAISystem/0.2 (research discovery)",
+        "x-api-key": "test-key",
+    }
+    assert first.candidates[0].doi == "10.1000/example.doi"
+    assert first.candidates[0].citation_count == 12
+    assert not first.cached
+    assert second.cached
+    assert "unverified bibliographic candidates" in first.verification_boundary
+
+
+def test_semantic_scholar_discovery_fails_closed_without_key_and_rate_limits() -> None:
+    with pytest.raises(SemanticScholarError, match="not configured"):
+        SemanticScholarClient(None, fetch=lambda url, headers: {}).discover("fuzzy similarity DTI prediction")
+    client = SemanticScholarClient("test-key", fetch=lambda url, headers: SEMANTIC_SCHOLAR_RESPONSE, clock=lambda: 100.0)
+    client.discover("fuzzy similarity DTI prediction")
+    with pytest.raises(SemanticScholarError, match="rate limited"):
+        client.discover("spectral graph theory literature")
+    malformed = SemanticScholarClient("test-key", fetch=lambda url, headers: {"error": "bad"})
+    with pytest.raises(SemanticScholarError, match="no usable"):
+        malformed.discover("fuzzy similarity DTI prediction")

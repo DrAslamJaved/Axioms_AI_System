@@ -45,6 +45,7 @@ from axioms.api import (
     decide_preference_proposal,
     discover_arxiv_preprints,
     discover_research_sources,
+    discover_semantic_scholar_papers,
     list_agents,
     list_personal_kb_entries,
     propose_episodic_memory,
@@ -55,7 +56,7 @@ from axioms.api import (
 from axioms.core import AxiomsCore
 from axioms.models import ApprovalDecision, TaskRequest
 from axioms.store import TaskStore
-from axioms.tools import ArxivClient, TavilyClient
+from axioms.tools import ArxivClient, SemanticScholarClient, TavilyClient
 
 
 def lecture_payload() -> LecturePlanIn:
@@ -168,6 +169,27 @@ def test_arxiv_discovery_handler_returns_unverified_preprint_candidates(monkeypa
     body = discover_arxiv_preprints(ResearchDiscoveryIn(query="fuzzy similarity DTI literature"))
     assert body["candidates"][0]["title"] == "Candidate preprint"
     assert "preprint candidates" in body["verification_boundary"]
+
+
+def test_semantic_scholar_handler_returns_unverified_bibliographic_candidates(monkeypatch) -> None:
+    response = {
+        "data": [
+            {
+                "paperId": "paper-001",
+                "title": "Candidate paper",
+                "authors": [{"name": "A. Researcher"}],
+                "externalIds": {"DOI": "10.1000/example.doi"},
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        api,
+        "_semantic_scholar_client",
+        lambda: SemanticScholarClient("test-key", fetch=lambda url, headers: response),
+    )
+    body = discover_semantic_scholar_papers(ResearchDiscoveryIn(query="fuzzy similarity DTI literature"))
+    assert body["candidates"][0]["title"] == "Candidate paper"
+    assert "unverified bibliographic candidates" in body["verification_boundary"]
 
 
 def test_episodic_memory_handlers_require_a_second_approval(tmp_path: Path, monkeypatch) -> None:
