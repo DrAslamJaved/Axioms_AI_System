@@ -18,6 +18,10 @@ real tool use and optional LLM synthesis:
   external bibliographic registry), synthesises verified claims through a
   constrained LLM prompt, and runs the output through an AutoEval guardrail —
   all captured in an auditable agent trace.
+- **Agentic assessment design** retains a deterministic, source-scoped
+  blueprint and can add a bounded LLM review for the instructor. It never
+  generates student-facing questions, answers, or worked solutions; release
+  remains blocked pending instructor review.
 - **Research discovery** can use Tavily as a bounded, read-only search tool to
   collect unverified source candidates with retrieval provenance. Candidates
   cannot be cited or synthesised until they pass the existing verification flow.
@@ -167,7 +171,7 @@ Use `GET /system/readiness` for a full component report.
 | Research (agentic) | `POST /research-briefs/agentic` | — |
 | Research discovery (read-only) | `POST /research/discover` | — |
 | Similarity screening (local review signal) | `POST /similarity/screen` | — |
-| Assessment Design | `POST /assessment-blueprints` | student + instructor DOCX |
+| Assessment Design | `POST /assessment-blueprints`; `POST /assessment-blueprints/agentic` | student + instructor DOCX; instructor-only review |
 | Content Creation | `POST /content-packages` | `POST /content-packages/docx` |
 | Social Media | `POST /social-media-packages` | `POST /social-media-packages/docx` |
 | STEM AI Portfolio | `POST /portfolio-packages` | `POST /portfolio-packages/docx` |
