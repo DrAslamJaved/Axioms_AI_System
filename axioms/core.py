@@ -8,6 +8,7 @@ from axioms.agents import (
     specialist_draft,
     writing_draft,
 )
+from axioms.dispatch import DispatchJob, DurableDispatchStore
 from axioms.episodic_memory import EpisodicMemoryStore, MemoryDecision, MemoryProposal
 from axioms.models import (
     AgentName,
@@ -49,10 +50,12 @@ class AxiomsCore:
         store: TaskStore | None = None,
         kb_store: PersonalKnowledgeStore | None = None,
         memory_store: EpisodicMemoryStore | None = None,
+        dispatch_store: DurableDispatchStore | None = None,
     ) -> None:
         self.store = store or TaskStore()
         self.kb_store = kb_store or PersonalKnowledgeStore(self.store.path)
         self.memory_store = memory_store or EpisodicMemoryStore(self.store.path)
+        self.dispatch_store = dispatch_store or DurableDispatchStore(self.store.path)
 
     def create_task(self, request: TaskRequest) -> TaskRecord:
         record = TaskRecord(request=request, subtasks=build_task_graph(request))
@@ -163,6 +166,29 @@ class AxiomsCore:
         )
         self.store.save(record)
         return record.to_dict()
+
+    def enqueue_approved_task(
+        self, task_id: str, *, idempotency_key: str, max_attempts: int = 2
+    ) -> DispatchJob:
+        """Persist an approved local task for a worker; this never starts execution itself."""
+        payload = self.store.get(task_id)
+        if payload is None:
+            raise KeyError(task_id)
+        if TaskStatus(payload["status"]) is not TaskStatus.APPROVED:
+            raise TaskStateError("Only an approved task may be queued for dispatch.")
+        job = self.dispatch_store.enqueue(
+            task_id, idempotency_key=idempotency_key, max_attempts=max_attempts
+        )
+        record = _record_from_payload(payload)
+        if not any(step.summary.endswith(job.job_id) for step in record.agent_trace):
+            record.agent_trace.append(
+                AgentStep(
+                    kind=StepKind.DISPATCH_QUEUED,
+                    summary=f"Approved local task queued for durable worker dispatch: {job.job_id}",
+                )
+            )
+            self.store.save(record)
+        return job
 
     def propose_episodic_memory(self, task_id: str) -> dict:
         """Create a human-review proposal from a completed, non-sensitive task episode."""
