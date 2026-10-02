@@ -134,6 +134,7 @@ class AxiomsCore:
         )
         self.store.save(record)
         try:
+            deliverables: list[Deliverable] = []
             for subtask in record.subtasks:
                 record.agent_trace.append(
                     AgentStep(
@@ -143,7 +144,7 @@ class AxiomsCore:
                     )
                 )
                 deliverable = _run_local_draft(record.request, subtask)
-                record.deliverables.append(deliverable)
+                deliverables.append(deliverable)
                 record.agent_trace.append(
                     AgentStep(
                         kind=StepKind.DELIVERABLE_CREATED,
@@ -157,6 +158,7 @@ class AxiomsCore:
             self.store.save(record)
             raise
 
+        record.deliverables.extend(deliverables)
         record.status = TaskStatus.AWAITING_REVIEW
         record.agent_trace.append(
             AgentStep(
@@ -166,6 +168,72 @@ class AxiomsCore:
         )
         self.store.save(record)
         return record.to_dict()
+
+    def run_one_dispatched_task(self, worker_id: str) -> dict | None:
+        """Claim and run one approved local job; no external action is available to the worker."""
+        job = self.dispatch_store.claim_next(worker_id)
+        if job is None:
+            return None
+        payload = self.store.get(job.task_id)
+        if payload is None:
+            finished = self.dispatch_store.finish(
+                job.job_id,
+                worker_id=worker_id,
+                succeeded=False,
+                error="Task no longer exists.",
+                retryable=False,
+            )
+            return {"job": finished.to_dict(), "task": None}
+        if TaskStatus(payload["status"]) is not TaskStatus.APPROVED:
+            finished = self.dispatch_store.finish(
+                job.job_id,
+                worker_id=worker_id,
+                succeeded=False,
+                error=f"Task is {payload['status']}, not approved.",
+                retryable=False,
+            )
+            return {"job": finished.to_dict(), "task": payload}
+
+        record = _record_from_payload(payload)
+        record.agent_trace.append(
+            AgentStep(
+                kind=StepKind.DISPATCH_EXECUTION_STARTED,
+                summary=f"Claimed durable dispatch job {job.job_id} for local execution by {worker_id}.",
+            )
+        )
+        self.store.save(record)
+        try:
+            task = self.execute(job.task_id)
+        except Exception as error:  # noqa: BLE001 - the worker must not strand a claimed job
+            retryable = self._retry_failed_local_task(job.task_id, job.job_id, str(error))
+            finished = self.dispatch_store.finish(
+                job.job_id,
+                worker_id=worker_id,
+                succeeded=False,
+                error=f"{type(error).__name__}: {error}",
+                retryable=retryable,
+            )
+            return {"job": finished.to_dict(), "task": self.store.get(job.task_id)}
+        finished = self.dispatch_store.finish(job.job_id, worker_id=worker_id, succeeded=True)
+        return {"job": finished.to_dict(), "task": task}
+
+    def _retry_failed_local_task(self, task_id: str, job_id: str, error: str) -> bool:
+        """Restore only clean local failures to approved state for the queue's bounded retry budget."""
+        payload = self.store.get(task_id)
+        if payload is None or TaskStatus(payload["status"]) is not TaskStatus.FAILED:
+            return False
+        record = _record_from_payload(payload)
+        if record.deliverables:
+            return False
+        record.status = TaskStatus.APPROVED
+        record.agent_trace.append(
+            AgentStep(
+                kind=StepKind.DISPATCH_RETRY_SCHEDULED,
+                summary=f"Local execution failed for {job_id}; restored approved task for bounded retry: {error}",
+            )
+        )
+        self.store.save(record)
+        return True
 
     def enqueue_approved_task(
         self, task_id: str, *, idempotency_key: str, max_attempts: int = 2
