@@ -50,6 +50,9 @@ real tool use and optional LLM synthesis:
   recorded layer; it preserves deterministic result ordering, remains opt-in,
   and never enables external actions. Default execution and the durable worker
   remain sequential.
+- **Cooperative local cancellation** lets a named human cancel an approved task
+  immediately, or request a running task to stop at its next persisted graph
+  layer. Partial drafts are discarded; cancellation creates no external action.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -151,6 +154,13 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/execute \
 # Result ordering remains deterministic; external actions remain unavailable.
 curl -X POST "http://127.0.0.1:8000/tasks/{task_id}/execute?parallel=true" \
   -H "X-API-Key: your-secret"
+
+# Stop an approved task immediately, or request a running task to stop at its
+# next safe graph-layer checkpoint. Partial drafts are discarded.
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/cancel \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"requested_by":"Dr Aslam", "note":"Scope changed"}'
 
 # Approve or reject the resulting drafts in a final human review.
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
