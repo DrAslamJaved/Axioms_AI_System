@@ -911,10 +911,12 @@ def run_one_dispatch_job(payload: DispatchRunIn, _auth: None = Depends(require_a
 
 
 @app.post("/tasks/{task_id}/execute")
-def execute_task(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
-    """Run an already-approved task and return review-only local drafts."""
+def execute_task(
+    task_id: str, parallel: bool = False, _auth: None = Depends(require_api_key)
+) -> dict:
+    """Run approved local drafts; ``parallel=true`` is opt-in for independent graph layers only."""
     try:
-        return core.execute(task_id)
+        return core.execute(task_id, parallel=parallel)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
     except TaskStateError as error:
