@@ -53,6 +53,9 @@ real tool use and optional LLM synthesis:
 - **Cooperative local cancellation** lets a named human cancel an approved task
   immediately, or request a running task to stop at its next persisted graph
   layer. Partial drafts are discarded; cancellation creates no external action.
+- **Interrupted task recovery** requires a named human to attest that the prior
+  local execution has stopped. It discards any partial work and returns the
+  task to pending approval; it never resumes execution automatically.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -161,6 +164,13 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/cancel \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
   -d '{"requested_by":"Dr Aslam", "note":"Scope changed"}'
+
+# Recover only after confirming a local execution was interrupted and has stopped.
+# A fresh execution approval is required before the task can run again.
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/recover \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"recovered_by":"Dr Aslam", "confirm_execution_stopped":true, "note":"Local worker restarted"}'
 
 # Approve or reject the resulting drafts in a final human review.
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
