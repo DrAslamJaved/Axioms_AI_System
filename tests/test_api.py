@@ -7,6 +7,7 @@ from axioms.api import (
     AssessmentBlueprintIn,
     AutoEvalReportIn,
     ContentPackageIn,
+    DispatchIn,
     FeedbackIn,
     LecturePlanIn,
     MemoryDecisionIn,
@@ -46,6 +47,7 @@ from axioms.api import (
     discover_arxiv_preprints,
     discover_research_sources,
     discover_semantic_scholar_papers,
+    dispatch_approved_task,
     list_agents,
     list_personal_kb_entries,
     propose_episodic_memory,
@@ -209,6 +211,16 @@ def test_episodic_memory_handlers_require_a_second_approval(tmp_path: Path, monk
     )
     assert decided["decided_by"] == "Dr Aslam"
     assert search_episodic_memory("spectral")[0]["task_id"] == record.task_id
+
+
+def test_dispatch_handler_queues_only_an_approved_task(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "dispatch.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    body = dispatch_approved_task(record.task_id, DispatchIn(idempotency_key="api-dispatch-001"))
+    assert body["task_id"] == record.task_id
+    assert body["status"] == "queued"
 
 
 def test_similarity_screen_handler_returns_a_review_signal_not_a_verdict() -> None:
