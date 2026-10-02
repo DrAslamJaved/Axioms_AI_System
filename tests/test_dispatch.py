@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -48,3 +49,18 @@ def test_dispatch_rejects_cross_task_idempotency_and_wrong_worker_completion(tmp
     assert claimed is not None
     with pytest.raises(DispatchStateError, match="different worker"):
         store.finish(job.job_id, worker_id="worker-b", succeeded=True)
+
+
+def test_expired_worker_lease_requeues_then_dead_letters_at_budget(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    job = store.enqueue("task_004", idempotency_key="dispatch-task-004", max_attempts=2)
+    started = datetime(2026, 1, 1, tzinfo=UTC)
+    first = store.claim_next("worker-a", now=started)
+    assert first is not None and first.lease_expires_at is not None
+    second = store.claim_next("worker-b", now=started + timedelta(seconds=121))
+    assert second is not None
+    assert second.job_id == job.job_id and second.attempts == 2
+    assert second.worker_id == "worker-b"
+    assert store.claim_next("worker-c", now=started + timedelta(seconds=242)) is None
+    final = store.get(job.job_id)
+    assert final is not None and final.status is DispatchStatus.DEAD_LETTER
