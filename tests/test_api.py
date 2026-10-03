@@ -36,6 +36,7 @@ from axioms.api import (
     create_autoeval_report_docx,
     create_content_package,
     create_content_package_docx,
+    create_cross_agent_autoeval,
     create_lecture_plan,
     create_lecture_plan_docx,
     create_portfolio_package,
@@ -485,6 +486,21 @@ def test_autoeval_docx_handler_returns_a_word_document(tmp_path: Path, monkeypat
     monkeypatch.chdir(tmp_path)
     response = create_autoeval_report_docx(autoeval_payload(), BackgroundTasks())
     assert Path(response.path).read_bytes()[:2] == b"PK"
+
+
+def test_cross_agent_autoeval_handler_creates_a_review_only_task_deliverable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    test_core.execute(record.task_id)
+
+    body = create_cross_agent_autoeval(record.task_id)
+
+    assert body["status"] == TaskStatus.AWAITING_REVIEW.value
+    assert body["deliverables"][-1]["agent"] == "autoeval"
 
 
 def test_system_integration_handlers_expose_profiles_and_deferrals() -> None:

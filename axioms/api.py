@@ -975,6 +975,17 @@ def execute_task(
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
+@app.post("/tasks/{task_id}/cross-agent-autoeval")
+def create_cross_agent_autoeval(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    """Create one review-only quality consolidation for completed local drafts."""
+    try:
+        return core.create_cross_agent_autoeval(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except TaskStateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 @app.post("/tasks/{task_id}/cancel")
 def cancel_task(
     task_id: str,

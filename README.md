@@ -58,6 +58,10 @@ real tool use and optional LLM synthesis:
 - **Interrupted task recovery** requires a named human to attest that the prior
   local execution has stopped. It discards any partial work and returns the
   task to pending approval; it never resumes execution automatically.
+- **Cross-agent AutoEval** produces one deterministic, hash-linked review of a
+  completed task's specialist drafts. It checks declared draft-marker contracts
+  and consolidates review signals without changing drafts, granting approval,
+  or triggering publication, scheduling, messaging, or other external action.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -239,6 +243,7 @@ Use `GET /system/readiness` for a full component report.
 | Social Media | `POST /social-media-packages`; `POST /social-media-packages/agentic` | `POST /social-media-packages/docx`; internal editorial review |
 | STEM AI Portfolio | `POST /portfolio-packages`; `POST /portfolio-packages/agentic` | `POST /portfolio-packages/docx`; internal readiness review |
 | AutoEval | `POST /autoeval-reports` | `POST /autoeval-reports/docx` |
+| Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
 
 ## System integration and readiness
 
