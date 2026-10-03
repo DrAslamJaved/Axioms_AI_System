@@ -49,3 +49,22 @@ request. Do not force-push or overwrite existing work.
 - Exercise backup/restore and approval-gate tests before inviting other users.
 - Do not expose the Streamlit or FastAPI ports publicly until authenticated access, TLS, and a
   security/privacy review are implemented.
+
+## 4. Local backup and restore drill
+
+Run this only as an identified operator. It creates a **new** backup and verifies
+a temporary restored copy; it does not schedule work or overwrite the live database:
+
+```powershell
+python scripts\backup_sqlite.py create `
+  --source data\axioms.sqlite3 `
+  --destination backups\axioms-$(Get-Date -Format yyyy-MM-dd).sqlite3
+
+python scripts\backup_sqlite.py verify-restore `
+  --backup backups\axioms-YYYY-MM-DD.sqlite3
+```
+
+Store backups outside Git and restrict access according to the institutional
+retention and privacy policy. A successful drill validates only SQLite integrity
+and the presence of the Axioms task table; it does not approve deployment,
+substitute for disaster-recovery planning, or restore data into production.
