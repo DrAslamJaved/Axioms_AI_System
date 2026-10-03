@@ -73,7 +73,9 @@ real tool use and optional LLM synthesis:
 - **SQLite** stores task episodes, a consented episodic-memory ledger, and an
   approved Personal Knowledge Base (PKB). Episodic memory retains only
   owner-approved, non-sensitive task summaries — never draft content by default.
-  An owner can delete a searchable entry; deletion retains only a minimal audit tombstone.
+  Approval chooses a bounded retention period (30 days by default; 1–365 days),
+  after which an entry expires into a minimal audit tombstone. An owner can also
+  delete a searchable entry; neither expiry nor deletion retains its content.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.
@@ -190,17 +192,21 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/memory-proposal \
   -H "X-API-Key: your-secret"
 
-# Approve the memory proposal, then retrieve approved episodes by keyword.
+# Approve the memory proposal for a bounded retention period, then retrieve approved episodes by keyword.
 curl -X POST http://127.0.0.1:8000/episodic-memory/proposals/{proposal_id}/decision \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
-  -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Retain this reusable planning context"}'
+  -d '{"decision":"approve", "approved_by":"Dr Aslam", "retention_days":30, "note":"Retain this reusable planning context"}'
 
 # Delete one searchable memory entry by ID; its content is removed.
 curl -X DELETE http://127.0.0.1:8000/episodic-memory/{memory_id} \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
   -d '{"deleted_by":"Dr Aslam", "note":"No longer needed"}'
+
+# Inspect non-content lifecycle provenance for an active, deleted, or expired memory ID.
+curl http://127.0.0.1:8000/episodic-memory/{memory_id}/audit \
+  -H "X-API-Key: your-secret"
 
 # Screen supplied text against a local comparison set; review any flagged overlap.
 curl -X POST http://127.0.0.1:8000/similarity/screen \
