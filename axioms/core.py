@@ -194,6 +194,36 @@ class AxiomsCore:
         """Expose revision-family metadata for human audit; this cannot change tasks."""
         return self.store.lineage(task_id)
 
+    def compare_revision(self, task_id: str) -> dict:
+        """Show a reviewer the direct parent-to-revision changes without acting on either task."""
+        revision = self.store.get(task_id)
+        if revision is None:
+            raise KeyError(task_id)
+        parent_id = revision.get("revision_of")
+        if not parent_id:
+            raise TaskStateError("Task is not a linked revision.")
+        parent = self.store.get(parent_id)
+        if parent is None:
+            raise TaskStateError("Linked revision has no available parent task.")
+        revision_status = TaskStatus(revision["status"])
+        return {
+            "original_task_id": parent_id,
+            "revision_task_id": task_id,
+            "request_changes": _request_changes(parent["request"], revision["request"]),
+            "original_final_review": {
+                "status": parent["status"],
+                "reviewed_by": parent.get("reviewed_by"),
+                "rejection_note": parent.get("approval_note"),
+            },
+            "revision_governance": {
+                "requested_by": revision.get("revision_requested_by"),
+                "status": revision_status.value,
+                "execution_permitted": revision_status is TaskStatus.APPROVED,
+                "fresh_human_approval_required": revision_status
+                in {TaskStatus.PLANNED, TaskStatus.PENDING_APPROVAL},
+            },
+        }
+
     def request_cancellation(self, task_id: str, requested_by: str, note: str | None = None) -> dict:
         """Request cooperative cancellation before or between local graph layers.
 
@@ -680,6 +710,18 @@ def _run_local_draft(request: TaskRequest, subtask: Subtask) -> Deliverable:
             "- Treat this as reviewer direction only; validate the revised draft before release."
         )
     return draft
+
+
+_REVISION_REQUEST_FIELDS = ("goal", "audience", "deadline", "constraints", "external_delivery", "revision_note")
+
+
+def _request_changes(parent_request: dict, revision_request: dict) -> list[dict]:
+    """Retain a compact, ordered diff over the typed task-request contract."""
+    return [
+        {"field": field, "before": parent_request.get(field), "after": revision_request.get(field)}
+        for field in _REVISION_REQUEST_FIELDS
+        if parent_request.get(field) != revision_request.get(field)
+    ]
 
 
 _CROSS_AGENT_REQUIRED_MARKERS: dict[AgentName, tuple[str, ...]] = {
