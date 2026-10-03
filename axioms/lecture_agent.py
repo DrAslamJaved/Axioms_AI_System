@@ -7,6 +7,8 @@ from pathlib import Path
 
 from docx import Document
 
+from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider, get_provider
+
 
 @dataclass(frozen=True, slots=True)
 class LectureRequest:
@@ -104,8 +106,8 @@ def _allocate_minutes(total: int) -> tuple[int, ...]:
     return tuple(allocation)
 
 
-def build_lecture_plan(request: LectureRequest) -> LecturePlan:
-    """Build a transparent plan following intuition → formalism → application."""
+def build_lecture_plan(request: LectureRequest, *, provider: LLMProvider | None = None) -> LecturePlan:
+    """Build a review-first plan, enriching its fixed teaching structure only when configured."""
     request.validate()
     minutes = _allocate_minutes(request.duration_minutes)
     application = request.application_context or "a discipline-relevant real-world example"
@@ -123,6 +125,7 @@ def build_lecture_plan(request: LectureRequest) -> LecturePlan:
         TimedSection("Guided application", minutes[4], f"Apply the method to {application}.", "Circulate, prompt, and collect one representative misconception."),
         TimedSection("Retrieval and exit check", minutes[5], "Consolidate learning and expose remaining misconceptions.", "Use a one-minute written explanation or a short formative question."),
     )
+    sections = _synthesise_sections(request, sections, provider or get_provider())
     board_work = (
         f"Start with a labelled motivating situation for {request.topic}; do not start with symbols.",
         "Build notation progressively and box assumptions before using them.",
@@ -146,6 +149,81 @@ def build_lecture_plan(request: LectureRequest) -> LecturePlan:
         ),
         review_checklist=review_checklist,
     )
+
+
+_LECTURE_SYSTEM_PROMPT = """You are the Axioms lecture-design assistant.
+Improve only the pedagogical purpose and instructor prompt for each supplied timed
+section. Preserve the requested duration, section order, learning outcomes, and
+the requirement for human instructor review. Do not assert unverified theorems,
+facts, calculations, examples, or citations. Do not include student data.
+
+Return exactly one block per supplied section, in its original order, separated
+by a line containing only `---`. Each block must contain exactly these two lines:
+Purpose: <one concise sentence>
+Instructor prompt: <one concise sentence>
+"""
+
+
+def _synthesise_sections(
+    request: LectureRequest,
+    sections: tuple[TimedSection, ...],
+    provider: LLMProvider,
+) -> tuple[TimedSection, ...]:
+    """Use bounded pedagogical wording when available; retain the deterministic plan otherwise."""
+    section_specification = "\n".join(
+        f"{index}. {section.title} ({section.minutes} minutes)"
+        for index, section in enumerate(sections, start=1)
+    )
+    outcomes = "\n".join(f"- {outcome}" for outcome in request.learning_outcomes)
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Course level: {request.course_level}\n"
+        f"Audience: {request.audience}\n"
+        f"Prior knowledge: {request.prior_knowledge}\n"
+        f"Application context: {request.application_context or 'Not specified'}\n"
+        f"Learning outcomes:\n{outcomes}\n\n"
+        f"Timed sections:\n{section_specification}\n"
+    )
+    try:
+        result = provider.complete(
+            [LLMMessage("system", _LECTURE_SYSTEM_PROMPT), LLMMessage("user", user_prompt)],
+            max_tokens=900,
+            temperature=0.2,
+        )
+    except LLMDisabledError:
+        return sections
+    except Exception:  # noqa: BLE001 - provider failures must retain the local review-first fallback
+        return sections
+    generated = _parse_section_synthesis(result.text, len(sections))
+    if generated is None:
+        return sections
+    return tuple(
+        TimedSection(
+            title=section.title,
+            minutes=section.minutes,
+            purpose=purpose,
+            instructor_prompt=instructor_prompt,
+        )
+        for section, (purpose, instructor_prompt) in zip(sections, generated, strict=True)
+    )
+
+
+def _parse_section_synthesis(text: str, expected_sections: int) -> tuple[tuple[str, str], ...] | None:
+    """Accept only the narrow response format; malformed model output never alters the plan."""
+    blocks = [block.strip() for block in text.split("---") if block.strip()]
+    if len(blocks) != expected_sections:
+        return None
+    parsed: list[tuple[str, str]] = []
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if len(lines) != 2 or not lines[0].startswith("Purpose: ") or not lines[1].startswith("Instructor prompt: "):
+            return None
+        purpose = lines[0].removeprefix("Purpose: ").strip()
+        instructor_prompt = lines[1].removeprefix("Instructor prompt: ").strip()
+        if not purpose or not instructor_prompt or len(purpose) > 600 or len(instructor_prompt) > 600:
+            return None
+        parsed.append((purpose, instructor_prompt))
+    return tuple(parsed)
 
 
 def export_docx(plan: LecturePlan, destination: Path) -> Path:
