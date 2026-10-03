@@ -38,7 +38,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent("Specialist registry", IntegrationState.IMPLEMENTED, "Eight review-first profiles with API endpoints."),
         IntegrationComponent("Human approval boundary", IntegrationState.IMPLEMENTED, "Risk-tier classification (LOW/ELEVATED/HIGH) with blocking enforcement on HIGH-risk tasks."),
         IntegrationComponent("API-key authentication", IntegrationState.IMPLEMENTED, "Named multi-key and single-key modes with principal resolution for authenticated approver identity."),
-        IntegrationComponent("LLM provider seam", IntegrationState.IMPLEMENTED, "Pluggable Anthropic/OpenAI backends with DisabledProvider safe default. Optional dependency."),
+        IntegrationComponent(
+            "LLM provider seam",
+            IntegrationState.IMPLEMENTED,
+            "Pluggable Anthropic/OpenAI backends with a DisabledProvider safe default; bounded lecture-design synthesis is wired while other specialist agents remain deterministic.",
+        ),
         IntegrationComponent("Crossref DOI verification", IntegrationState.IMPLEMENTED, "Real external metadata verification tool with injectable transport for offline testing."),
         IntegrationComponent("Tavily evidence discovery", IntegrationState.IMPLEMENTED, "Read-only search candidates with provenance and an explicit verification boundary; disabled until configured."),
         IntegrationComponent(
