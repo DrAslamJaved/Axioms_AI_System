@@ -101,6 +101,20 @@ def test_only_approved_tasks_can_be_durably_queued_with_an_idempotent_trace(tmp_
     assert [step["kind"] for step in task["agent_trace"]].count(StepKind.DISPATCH_QUEUED) == 1
 
 
+def test_operational_summary_reports_aggregate_local_health_without_exposing_task_content(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.enqueue_approved_task(record.task_id, idempotency_key="operations-summary-001")
+
+    summary = core.operational_summary()
+
+    assert summary["tasks"][TaskStatus.APPROVED.value] == 1
+    assert summary["dispatch"]["status_counts"]["queued"] == 1
+    assert not summary["external_actions_enabled"]
+    assert summary["human_review_required"]
+
+
 def test_local_worker_executes_one_claimed_approved_job_then_requires_final_review(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
