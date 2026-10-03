@@ -59,6 +59,7 @@ from axioms.api import (
     discover_research_sources,
     discover_semantic_scholar_papers,
     dispatch_approved_task,
+    get_task_lineage,
     list_agents,
     list_personal_kb_entries,
     list_tasks,
@@ -153,6 +154,23 @@ def test_revision_handler_creates_a_separate_freshly_gated_task(tmp_path: Path, 
 
     assert revision["revision_of"] == original.task_id
     assert revision["status"] == TaskStatus.PENDING_APPROVAL.value
+
+
+def test_task_lineage_handler_returns_metadata_only_revision_family(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    root = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    root.status = TaskStatus.REJECTED
+    root.reviewed_by = "Dr Aslam"
+    root.approval_note = "Include a numerical example."
+    test_core.store.save(root)
+    revision = test_core.create_revision(root.task_id, "Dr Aslam")
+
+    lineage = get_task_lineage(revision["task_id"])
+
+    assert lineage["root_task_id"] == root.task_id
+    assert [item["task_id"] for item in lineage["items"]] == [root.task_id, revision["task_id"]]
+    assert "approval_note" not in lineage["items"][0]
 
 
 def test_lecture_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
