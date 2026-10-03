@@ -4,6 +4,7 @@ import pytest
 from docx import Document
 
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
+from axioms.llm import DisabledProvider, FakeProvider
 
 
 def request() -> LectureRequest:
@@ -41,6 +42,56 @@ def test_plan_includes_teaching_style_and_review_controls() -> None:
     assert "Python/NumPy" in plan.practice_activity
     assert "Verify every theorem statement" in plan.review_checklist[0]
     assert "Formal development" in plan.to_markdown()
+
+
+def test_disabled_llm_retains_the_deterministic_review_first_plan() -> None:
+    plan = build_lecture_plan(request(), provider=DisabledProvider())
+
+    assert plan.sections[0].purpose == "Activate curiosity through a familiar problem."
+    assert plan.sections[0].instructor_prompt == "Where might Spectral Graph Theory arise outside the textbook?"
+    assert plan.total_minutes == 75
+
+
+def test_fake_llm_enriches_section_wording_without_changing_the_timing_contract() -> None:
+    response = "\n---\n".join(
+        f"Purpose: Custom purpose {index}.\nInstructor prompt: Custom instructor prompt {index}."
+        for index in range(1, 7)
+    )
+    captured_messages = []
+    provider = FakeProvider(lambda messages: (captured_messages.extend(messages), response)[1])
+
+    plan = build_lecture_plan(request(), provider=provider)
+
+    assert plan.total_minutes == 75
+    assert [section.title for section in plan.sections] == [
+        "Opening hook",
+        "Intuition and prior knowledge",
+        "Formal development",
+        "Worked example",
+        "Guided application",
+        "Retrieval and exit check",
+    ]
+    assert plan.sections[0].purpose == "Custom purpose 1."
+    assert plan.sections[-1].instructor_prompt == "Custom instructor prompt 6."
+    assert "Spectral Graph Theory" in captured_messages[1].content
+    assert "Learning outcomes:" in captured_messages[1].content
+
+
+def test_malformed_llm_output_falls_back_without_changing_the_plan() -> None:
+    plan = build_lecture_plan(request(), provider=FakeProvider(lambda _messages: "unstructured response"))
+
+    assert plan.sections[0].purpose == "Activate curiosity through a familiar problem."
+    assert plan.sections[-1].title == "Retrieval and exit check"
+
+
+def test_provider_failure_falls_back_without_changing_the_plan() -> None:
+    def fail(_messages) -> str:
+        raise RuntimeError("provider unavailable")
+
+    plan = build_lecture_plan(request(), provider=FakeProvider(fail))
+
+    assert plan.sections[0].purpose == "Activate curiosity through a familiar problem."
+    assert plan.total_minutes == 75
 
 
 def test_invalid_duration_is_rejected() -> None:
