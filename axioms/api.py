@@ -161,6 +161,10 @@ class RecoveryIn(BaseModel):
     confirm_execution_stopped: bool = False
 
 
+class RevisionIn(BaseModel):
+    requested_by: str = Field(min_length=2, max_length=200)
+
+
 class LecturePlanIn(BaseModel):
     topic: str = Field(min_length=2, max_length=300)
     course_level: str = Field(min_length=2, max_length=100)
@@ -1016,6 +1020,25 @@ def create_cross_agent_autoeval(task_id: str, _auth: None = Depends(require_api_
         raise HTTPException(status_code=404, detail="Task not found") from error
     except TaskStateError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post("/tasks/{task_id}/revise")
+def create_task_revision(
+    task_id: str,
+    payload: RevisionIn,
+    _auth: None = Depends(require_api_key),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    """Create a separate, approval-gated revision from a final reviewer rejection."""
+    requester = principal or payload.requested_by
+    try:
+        return core.create_revision(task_id, requester)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except TaskStateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/tasks/{task_id}/cancel")
