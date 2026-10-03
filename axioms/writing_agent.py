@@ -8,6 +8,8 @@ from pathlib import Path
 
 from docx import Document
 
+from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider, get_provider
+
 
 class DocumentType(StrEnum):
     EMAIL = "email"
@@ -134,9 +136,11 @@ def _draft_sections(request: WritingRequest) -> tuple[DraftSection, ...]:
     )
 
 
-def build_writing_draft(request: WritingRequest) -> WritingDraft:
-    """Build an auditable draft framework without inventing facts, citations, or results."""
+def build_writing_draft(request: WritingRequest, *, provider: LLMProvider | None = None) -> WritingDraft:
+    """Build an auditable draft, enriching section prose only through a bounded provider call."""
     request.validate()
+    sections = _draft_sections(request)
+    sections = _synthesise_sections(request, sections, provider or get_provider())
     subject_line = f"Regarding: {request.subject}" if request.document_type is DocumentType.EMAIL else None
     evidence_checklist = [
         "Confirm every factual statement against its source or an approved record.",
@@ -157,12 +161,74 @@ def build_writing_draft(request: WritingRequest) -> WritingDraft:
     )
     return WritingDraft(
         request=request,
-        sections=_draft_sections(request),
+        sections=sections,
         subject_line=subject_line,
         evidence_checklist=tuple(evidence_checklist),
         originality_checklist=originality_checklist,
         suggested_edits=suggested_edits,
     )
+
+
+_WRITING_SYSTEM_PROMPT = """You are the Axioms writing and communication assistant.
+Improve only the supplied draft-section prose. Preserve every heading, document
+type, and human review boundary. Use only the verified facts and key points in
+the user message; do not invent names, dates, results, citations, achievements,
+or claims. This is an author-review draft, never final or externally delivered.
+
+Return exactly one block per supplied heading, in its original order, separated
+by a line containing only `---`. Each block must be one concise paragraph with
+no heading, list marker, citation, or additional commentary.
+"""
+
+
+def _synthesise_sections(
+    request: WritingRequest,
+    sections: tuple[DraftSection, ...],
+    provider: LLMProvider,
+) -> tuple[DraftSection, ...]:
+    """Use bounded prose only when it has the expected shape; otherwise retain the template."""
+    section_specification = "\n".join(
+        f"{index}. {section.heading}" for index, section in enumerate(sections, start=1)
+    )
+    facts = "\n".join(f"- {fact}" for fact in request.verified_facts)
+    key_points = "\n".join(f"- {point}" for point in request.key_points)
+    user_prompt = (
+        f"Document type: {request.document_type.value}\n"
+        f"Subject: {request.subject}\n"
+        f"Audience: {request.audience}\n"
+        f"Purpose: {request.purpose}\n"
+        f"Tone: {request.tone}\n\n"
+        f"Verified facts (the only factual basis):\n{facts}\n\n"
+        f"Key points (do not turn them into unsupported results):\n{key_points}\n\n"
+        f"Headings to populate:\n{section_specification}\n"
+    )
+    try:
+        result = provider.complete(
+            [LLMMessage("system", _WRITING_SYSTEM_PROMPT), LLMMessage("user", user_prompt)],
+            max_tokens=1_200,
+            temperature=0.2,
+        )
+    except LLMDisabledError:
+        return sections
+    except Exception:  # noqa: BLE001 - provider failures must retain the local review-first fallback
+        return sections
+    generated = _parse_section_synthesis(result.text, len(sections))
+    if generated is None:
+        return sections
+    return tuple(
+        DraftSection(heading=section.heading, content=content)
+        for section, content in zip(sections, generated, strict=True)
+    )
+
+
+def _parse_section_synthesis(text: str, expected_sections: int) -> tuple[str, ...] | None:
+    """Accept only bounded, paragraph-only output so malformed responses cannot alter a draft."""
+    blocks = [block.strip() for block in text.split("---") if block.strip()]
+    if len(blocks) != expected_sections:
+        return None
+    if any("\n" in block or len(block) > 2_000 for block in blocks):
+        return None
+    return tuple(blocks)
 
 
 def export_docx(draft: WritingDraft, destination: Path) -> Path:
