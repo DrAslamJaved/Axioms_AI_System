@@ -64,6 +64,38 @@ class TaskStore:
             row = connection.execute("SELECT payload FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return json.loads(row[0]) if row else None
 
+    def list(
+        self, status: TaskStatus | str | None = None, *, limit: int = 50, cursor: str | None = None
+    ) -> dict:
+        """Return a bounded, read-only task page in stable descending task-ID order."""
+        if not 1 <= limit <= 200:
+            raise ValueError("Task-list limit must be between 1 and 200.")
+        normalized_status = TaskStatus(status).value if status is not None else None
+        clauses: list[str] = []
+        parameters: list[str | int] = []
+        if normalized_status is not None:
+            clauses.append("json_extract(payload, '$.status') = ?")
+            parameters.append(normalized_status)
+        if cursor is not None:
+            normalized_cursor = cursor.strip()
+            if not normalized_cursor:
+                raise ValueError("Task-list cursor cannot be blank.")
+            clauses.append("task_id < ?")
+            parameters.append(normalized_cursor)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        parameters.append(limit + 1)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT task_id, payload FROM tasks"
+                f"{where} ORDER BY task_id DESC LIMIT ?",
+                parameters,
+            ).fetchall()
+        page = rows[:limit]
+        return {
+            "items": [json.loads(row[1]) for row in page],
+            "next_cursor": page[-1][0] if len(rows) > limit and page else None,
+        }
+
     def status_counts(self) -> dict[str, int]:
         """Return aggregate task lifecycle counts without exposing task content."""
         counts = {status.value: 0 for status in TaskStatus}
