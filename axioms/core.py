@@ -190,6 +190,10 @@ class AxiomsCore:
         self.store.save(revision)
         return revision.to_dict()
 
+    def task_lineage(self, task_id: str) -> dict:
+        """Expose revision-family metadata for human audit; this cannot change tasks."""
+        return self.store.lineage(task_id)
+
     def request_cancellation(self, task_id: str, requested_by: str, note: str | None = None) -> dict:
         """Request cooperative cancellation before or between local graph layers.
 

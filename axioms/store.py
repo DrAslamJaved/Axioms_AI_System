@@ -96,6 +96,52 @@ class TaskStore:
             "next_cursor": page[-1][0] if len(rows) > limit and page else None,
         }
 
+    def lineage(self, task_id: str) -> dict:
+        """Return a read-only revision family without drafts or review notes.
+
+        A lineage is rooted at the earliest available task and includes every
+        descendant revision. It is deliberately a metadata view: detailed task
+        content remains available only from the individual task record.
+        """
+        with self._connect() as connection:
+            rows = connection.execute("SELECT task_id, payload FROM tasks").fetchall()
+        tasks = {row[0]: json.loads(row[1]) for row in rows}
+        if task_id not in tasks:
+            raise KeyError(task_id)
+
+        root_id = task_id
+        ancestors_seen: set[str] = set()
+        while parent_id := tasks[root_id].get("revision_of"):
+            if root_id in ancestors_seen:
+                raise ValueError("Task revision lineage contains a cycle.")
+            ancestors_seen.add(root_id)
+            if parent_id not in tasks:
+                raise ValueError("Task revision lineage has a missing ancestor.")
+            root_id = parent_id
+
+        children: dict[str, list[str]] = {}
+        for candidate_id, payload in tasks.items():
+            if parent_id := payload.get("revision_of"):
+                children.setdefault(parent_id, []).append(candidate_id)
+        for descendants in children.values():
+            descendants.sort(key=lambda candidate_id: _lineage_sort_key(tasks[candidate_id]))
+
+        lineage: list[dict] = []
+        pending = [root_id]
+        visited: set[str] = set()
+        while pending:
+            current_id = pending.pop(0)
+            if current_id in visited:
+                raise ValueError("Task revision lineage contains a cycle.")
+            visited.add(current_id)
+            lineage.append(_lineage_item(tasks[current_id]))
+            pending.extend(children.get(current_id, []))
+        return {
+            "requested_task_id": task_id,
+            "root_task_id": root_id,
+            "items": lineage,
+        }
+
     def status_counts(self) -> dict[str, int]:
         """Return aggregate task lifecycle counts without exposing task content."""
         counts = {status.value: 0 for status in TaskStatus}
@@ -108,3 +154,21 @@ class TaskStore:
             if status in counts:
                 counts[status] = count
         return counts
+
+
+def _lineage_sort_key(payload: dict) -> tuple[str, str]:
+    return (payload.get("created_at", ""), payload["task_id"])
+
+
+def _lineage_item(payload: dict) -> dict:
+    """Project only review-queue metadata, never deliverables or reviewer notes."""
+    return {
+        "task_id": payload["task_id"],
+        "revision_of": payload.get("revision_of"),
+        "revision_requested_by": payload.get("revision_requested_by"),
+        "created_at": payload["created_at"],
+        "status": payload["status"],
+        "risk_tier": payload.get("risk_tier"),
+        "goal": payload["request"]["goal"],
+        "reviewed_by": payload.get("reviewed_by"),
+    }

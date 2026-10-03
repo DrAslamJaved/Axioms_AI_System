@@ -920,6 +920,17 @@ def get_task(task_id: str) -> dict:
     return task
 
 
+@app.get("/tasks/{task_id}/lineage")
+def get_task_lineage(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    """Return the read-only revision family metadata for a human reviewer."""
+    try:
+        return core.task_lineage(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 @app.post("/tasks/{task_id}/dispatch")
 def dispatch_approved_task(
     task_id: str, payload: DispatchIn, _auth: None = Depends(require_api_key)

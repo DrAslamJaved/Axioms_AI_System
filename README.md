@@ -66,6 +66,9 @@ real tool use and optional LLM synthesis:
   task only after final human rejection with a reviewer note. The original task
   remains rejected; the new task carries the feedback as draft context and must
   receive fresh approval before it can execute.
+- **Read-only task lineage** gives authenticated reviewers a stable revision
+  family view with lifecycle metadata only. It excludes drafts and reviewer
+  notes, and it cannot approve, alter, rerun, or release any task.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -199,6 +202,10 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/revise \
   -H "X-API-Key: your-secret" \
   -d '{"requested_by":"Dr Aslam"}'
 
+# Inspect the complete revision family as metadata only; no drafts or notes are returned.
+curl http://127.0.0.1:8000/tasks/{task_id}/lineage \
+  -H "X-API-Key: your-secret"
+
 # Propose the completed non-sensitive episode for memory; a second decision is required.
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/memory-proposal \
   -H "X-API-Key: your-secret"
@@ -278,6 +285,7 @@ location suitable for the institution's data-retention policy.
 | AutoEval | `POST /autoeval-reports` | `POST /autoeval-reports/docx` |
 | Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
 | Task revision | `POST /tasks/{task_id}/revise` after final rejection | Creates a linked new task; fresh approval remains required |
+| Task lineage | `GET /tasks/{task_id}/lineage` | Authenticated, metadata-only revision-family audit |
 
 ## System integration and readiness
 
