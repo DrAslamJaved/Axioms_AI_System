@@ -24,6 +24,24 @@ def test_dispatch_is_idempotent_and_records_claim_success(tmp_path: Path) -> Non
     assert store.claim_next("another-worker") is None
 
 
+def test_operational_summary_reports_queue_states_and_expired_leases_without_mutating_jobs(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    started = datetime(2026, 1, 1, tzinfo=UTC)
+    queued = store.enqueue("task_queued", idempotency_key="operations-queued")
+    claimed = store.claim_next("worker-a", now=started)
+    assert claimed is not None and claimed.job_id == queued.job_id
+    store.enqueue("task_waiting", idempotency_key="operations-waiting")
+
+    summary = store.operational_summary(now=started + timedelta(seconds=121))
+
+    assert summary["status_counts"][DispatchStatus.CLAIMED.value] == 1
+    assert summary["status_counts"][DispatchStatus.QUEUED.value] == 1
+    assert summary["expired_lease_count"] == 1
+    assert store.get(claimed.job_id).status is DispatchStatus.CLAIMED
+
+
 def test_dispatch_retries_within_fixed_budget_then_dead_letters(tmp_path: Path) -> None:
     store = _store(tmp_path)
     job = store.enqueue("task_002", idempotency_key="dispatch-task-002", max_attempts=2)
