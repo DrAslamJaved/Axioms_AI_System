@@ -24,6 +24,7 @@ from axioms.api import (
     SimilarityScreenIn,
     SocialMediaPackageIn,
     WritingDraftIn,
+    audit_episodic_memory,
     cancel_task,
     create_agentic_assessment_blueprint,
     create_agentic_content_review,
@@ -276,6 +277,28 @@ def test_episodic_memory_delete_handler_removes_searchable_entry(tmp_path: Path,
 
     assert deleted["memory_id"] == entry["memory_id"]
     assert search_episodic_memory("spectral") == []
+
+
+def test_episodic_memory_handlers_expose_retention_and_non_content_audit(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    test_core.execute(record.task_id)
+    test_core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    proposal = propose_episodic_memory(record.task_id)
+    decide_episodic_memory(
+        proposal["proposal_id"],
+        MemoryDecisionIn(decision="approve", approved_by="Dr Aslam", retention_days=14),
+        principal=None,
+    )
+    entry = search_episodic_memory("spectral")[0]
+
+    audit = audit_episodic_memory(entry["memory_id"])
+
+    assert audit["state"] == "active"
+    assert audit["retention_days"] == 14
+    assert audit["provenance"]["source_task_id"] == record.task_id
 
 
 def test_dispatch_handler_queues_only_an_approved_task(tmp_path: Path, monkeypatch) -> None:
