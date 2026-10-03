@@ -521,6 +521,15 @@ class AxiomsCore:
     def audit_episodic_memory(self, memory_id: str) -> dict:
         return self.memory_store.audit(memory_id)
 
+    def operational_summary(self) -> dict:
+        """Expose aggregate local health only; this endpoint cannot change tasks or workers."""
+        return {
+            "tasks": self.store.status_counts(),
+            "dispatch": self.dispatch_store.operational_summary(),
+            "external_actions_enabled": False,
+            "human_review_required": True,
+        }
+
     def create_cross_agent_autoeval(self, task_id: str) -> dict:
         """Add one deterministic, review-only quality report for completed graph drafts.
 
