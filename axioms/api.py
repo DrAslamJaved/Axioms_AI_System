@@ -486,6 +486,12 @@ def system_readiness() -> dict:
     return build_system_readiness_report().to_dict()
 
 
+@app.get("/operations/summary")
+def operations_summary(_auth: None = Depends(require_api_key)) -> dict:
+    """Return read-only aggregate task and local-worker health for human operators."""
+    return core.operational_summary()
+
+
 @app.post("/feedback")
 def record_feedback(payload: FeedbackIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
