@@ -4,8 +4,9 @@ import os
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -35,7 +36,7 @@ from axioms.episodic_memory import MemoryDecision
 from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
 from axioms.llm import LLMConfigurationError, get_provider
-from axioms.models import AgentName, ApprovalDecision, TaskRequest
+from axioms.models import AgentName, ApprovalDecision, TaskRequest, TaskStatus
 from axioms.personal_kb import (
     FeedbackRecord,
     PreferenceCategory,
@@ -891,6 +892,20 @@ def create_autoeval_report_docx(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return _docx_response(lambda path: export_autoeval_docx(report, path), "autoeval_report.docx", background)
+
+
+@app.get("/tasks")
+def list_tasks(
+    status: Annotated[TaskStatus | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    _auth: None = Depends(require_api_key),
+) -> dict:
+    """List task metadata for a human work queue; this endpoint cannot mutate tasks."""
+    try:
+        return core.store.list(status, limit=limit, cursor=cursor)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.get("/tasks/{task_id}")
