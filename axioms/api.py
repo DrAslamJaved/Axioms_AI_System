@@ -931,6 +931,17 @@ def get_task_lineage(task_id: str, _auth: None = Depends(require_api_key)) -> di
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
+@app.get("/tasks/{task_id}/revision-comparison")
+def compare_task_revision(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    """Return the direct task-request diff and approval boundary for one linked revision."""
+    try:
+        return core.compare_revision(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except TaskStateError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 @app.post("/tasks/{task_id}/dispatch")
 def dispatch_approved_task(
     task_id: str, payload: DispatchIn, _auth: None = Depends(require_api_key)

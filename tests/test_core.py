@@ -127,6 +127,43 @@ def test_revision_requires_a_final_rejection_with_reviewer_note(tmp_path: Path) 
         core.create_revision(before_execution.task_id, "Dr Aslam")
 
 
+def test_revision_comparison_exposes_the_review_note_and_fresh_approval_boundary(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    original = core.create_task(TaskRequest(goal="Write a formal research report"))
+    core.decide(original.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.execute(original.task_id)
+    core.decide(
+        original.task_id,
+        ApprovalDecision.REJECT,
+        "Add a worked example before this can be used.",
+        "Dr Aslam",
+    )
+    revision = core.create_revision(original.task_id, "Dr Aslam")
+
+    comparison = core.compare_revision(revision["task_id"])
+
+    assert comparison["original_task_id"] == original.task_id
+    assert comparison["revision_task_id"] == revision["task_id"]
+    assert comparison["request_changes"] == [
+        {
+            "field": "revision_note",
+            "before": None,
+            "after": "Add a worked example before this can be used.",
+        }
+    ]
+    assert comparison["original_final_review"]["rejection_note"] == "Add a worked example before this can be used."
+    assert comparison["revision_governance"]["fresh_human_approval_required"]
+    assert not comparison["revision_governance"]["execution_permitted"]
+
+
+def test_revision_comparison_rejects_a_task_without_a_parent(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    original = core.create_task(TaskRequest(goal="Write a formal research report"))
+
+    with pytest.raises(TaskStateError, match="not a linked revision"):
+        core.compare_revision(original.task_id)
+
+
 def test_only_approved_tasks_can_be_durably_queued_with_an_idempotent_trace(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))

@@ -113,6 +113,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             "Authenticated reviewers can inspect a revision family as projected metadata, without drafts, review notes, approval changes, or external action.",
         ),
         IntegrationComponent(
+            "Revision comparison",
+            IntegrationState.IMPLEMENTED,
+            "Authenticated reviewers can compare a linked revision with its direct parent, including the recorded rejection note and typed request differences; it cannot approve, edit, or execute either task.",
+        ),
+        IntegrationComponent(
             "Local operations summary",
             IntegrationState.IMPLEMENTED,
             "A read-only authenticated endpoint exposes aggregate task states and local worker-lease health; it cannot claim, renew, run, recover, or alter work.",

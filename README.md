@@ -69,6 +69,9 @@ real tool use and optional LLM synthesis:
 - **Read-only task lineage** gives authenticated reviewers a stable revision
   family view with lifecycle metadata only. It excludes drafts and reviewer
   notes, and it cannot approve, alter, rerun, or release any task.
+- **Revision comparison** gives an authenticated reviewer the direct parent-to-
+  revision request diff, the recorded final-review rejection note, and the
+  current execution boundary before a fresh approval decision.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -206,6 +209,10 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/revise \
 curl http://127.0.0.1:8000/tasks/{task_id}/lineage \
   -H "X-API-Key: your-secret"
 
+# Compare a revision with its direct rejected parent before granting new approval.
+curl http://127.0.0.1:8000/tasks/{revision_task_id}/revision-comparison \
+  -H "X-API-Key: your-secret"
+
 # Propose the completed non-sensitive episode for memory; a second decision is required.
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/memory-proposal \
   -H "X-API-Key: your-secret"
@@ -286,6 +293,7 @@ location suitable for the institution's data-retention policy.
 | Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
 | Task revision | `POST /tasks/{task_id}/revise` after final rejection | Creates a linked new task; fresh approval remains required |
 | Task lineage | `GET /tasks/{task_id}/lineage` | Authenticated, metadata-only revision-family audit |
+| Revision comparison | `GET /tasks/{task_id}/revision-comparison` | Authenticated parent-to-revision diff; no state changes |
 
 ## System integration and readiness
 
