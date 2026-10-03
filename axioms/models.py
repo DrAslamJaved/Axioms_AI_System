@@ -61,6 +61,7 @@ class StepKind(StrEnum):
     DISPATCH_EXECUTION_STARTED = "dispatch_execution_started"
     DISPATCH_RETRY_SCHEDULED = "dispatch_retry_scheduled"
     CROSS_AGENT_AUTOEVAL_CREATED = "cross_agent_autoeval_created"
+    REVISION_CREATED = "revision_created"
 
 
 @dataclass(slots=True)
@@ -70,6 +71,7 @@ class TaskRequest:
     deadline: str | None = None
     constraints: list[str] = field(default_factory=list)
     external_delivery: bool = False
+    revision_note: str | None = None
 
 
 @dataclass(slots=True)
@@ -109,6 +111,8 @@ class TaskRecord:
     approval_note: str | None = None
     approved_by: str | None = None
     reviewed_by: str | None = None
+    revision_of: str | None = None
+    revision_requested_by: str | None = None
     risk_tier: RiskTier = RiskTier.LOW
     policy_reason: str | None = None
     graph_version: str = "routing.v1"

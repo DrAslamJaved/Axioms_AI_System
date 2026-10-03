@@ -103,6 +103,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             "A deterministic, hash-linked consolidation reviews completed local specialist drafts against declared marker contracts; it cannot alter drafts or grant release approval.",
         ),
         IntegrationComponent(
+            "Approval-gated task revisions",
+            IntegrationState.IMPLEMENTED,
+            "A final-review rejection can create a linked new task with the reviewer note as revision context; the rejected task is unchanged and the revision requires fresh approval before execution.",
+        ),
+        IntegrationComponent(
             "Local operations summary",
             IntegrationState.IMPLEMENTED,
             "A read-only authenticated endpoint exposes aggregate task states and local worker-lease health; it cannot claim, renew, run, recover, or alter work.",

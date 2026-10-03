@@ -144,6 +144,52 @@ class AxiomsCore:
         self.store.save(record)
         return record.to_dict()
 
+    def create_revision(self, task_id: str, requested_by: str) -> dict:
+        """Create a new approval-gated task from a final human rejection.
+
+        The rejected task is immutable. Its reviewer note becomes transparent
+        revision context for a distinct task, which follows the full planning
+        and fresh-approval lifecycle before it can draft anything.
+        """
+        requester = requested_by.strip()
+        if not requester:
+            raise ValueError("A revision requester is required.")
+        payload = self.store.get(task_id)
+        if payload is None:
+            raise KeyError(task_id)
+        if TaskStatus(payload["status"]) is not TaskStatus.REJECTED:
+            raise TaskStateError("Only a final-review-rejected task can create a revision.")
+        reviewer = (payload.get("reviewed_by") or "").strip()
+        if not reviewer:
+            raise TaskStateError("A final human review is required before creating a revision.")
+        revision_note = (payload.get("approval_note") or "").strip()
+        if not revision_note:
+            raise TaskStateError("A final-review rejection note is required before creating a revision.")
+
+        original_request = TaskRequest(**payload["request"])
+        revision_request = TaskRequest(
+            goal=original_request.goal,
+            audience=original_request.audience,
+            deadline=original_request.deadline,
+            constraints=list(original_request.constraints),
+            external_delivery=original_request.external_delivery,
+            revision_note=revision_note,
+        )
+        revision = self.create_task(revision_request)
+        revision.revision_of = task_id
+        revision.revision_requested_by = requester
+        revision.agent_trace.append(
+            AgentStep(
+                kind=StepKind.REVISION_CREATED,
+                summary=(
+                    f"Created a linked revision from final rejection by {reviewer}; "
+                    "fresh human approval is required before execution."
+                ),
+            )
+        )
+        self.store.save(revision)
+        return revision.to_dict()
+
     def request_cancellation(self, task_id: str, requested_by: str, note: str | None = None) -> dict:
         """Request cooperative cancellation before or between local graph layers.
 
@@ -610,18 +656,26 @@ class AxiomsCore:
 def _run_local_draft(request: TaskRequest, subtask: Subtask) -> Deliverable:
     """Dispatch only local, deterministic drafting functions in this runtime phase."""
     if subtask.agent is AgentName.LECTURE:
-        return lecture_draft(request)
-    if subtask.agent is AgentName.WRITING:
-        return writing_draft(request)
-    if subtask.agent is AgentName.SOCIAL_MEDIA:
-        return social_media_draft(request)
-    if subtask.agent is AgentName.PORTFOLIO:
-        return portfolio_draft(request)
-    if subtask.agent is AgentName.AUTOEVAL:
-        return autoeval_draft(request)
-    if subtask.agent in {AgentName.RESEARCH, AgentName.ASSESSMENT, AgentName.CONTENT}:
-        return specialist_draft(request, subtask.agent)
-    raise ValueError(f"No local draft runner is registered for {subtask.agent.value}.")
+        draft = lecture_draft(request)
+    elif subtask.agent is AgentName.WRITING:
+        draft = writing_draft(request)
+    elif subtask.agent is AgentName.SOCIAL_MEDIA:
+        draft = social_media_draft(request)
+    elif subtask.agent is AgentName.PORTFOLIO:
+        draft = portfolio_draft(request)
+    elif subtask.agent is AgentName.AUTOEVAL:
+        draft = autoeval_draft(request)
+    elif subtask.agent in {AgentName.RESEARCH, AgentName.ASSESSMENT, AgentName.CONTENT}:
+        draft = specialist_draft(request, subtask.agent)
+    else:
+        raise ValueError(f"No local draft runner is registered for {subtask.agent.value}.")
+    if request.revision_note:
+        draft.content += (
+            "\n\n## Revision context\n"
+            f"- Final-review feedback to address: {request.revision_note}\n"
+            "- Treat this as reviewer direction only; validate the revised draft before release."
+        )
+    return draft
 
 
 _CROSS_AGENT_REQUIRED_MARKERS: dict[AgentName, tuple[str, ...]] = {
@@ -730,4 +784,6 @@ def _record_from_payload(payload: dict) -> TaskRecord:
         for item in payload.get("agent_trace", [])
     ]
     record.reviewed_by = payload.get("reviewed_by")
+    record.revision_of = payload.get("revision_of")
+    record.revision_requested_by = payload.get("revision_requested_by")
     return record

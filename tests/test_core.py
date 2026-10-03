@@ -87,6 +87,46 @@ def test_execution_requires_recorded_approval(tmp_path: Path) -> None:
         core.execute(record.task_id)
 
 
+def test_final_rejection_creates_a_linked_revision_that_requires_fresh_approval(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    original = core.create_task(TaskRequest(goal="Write a formal research report"))
+    core.decide(original.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    core.execute(original.task_id)
+    rejected = core.decide(
+        original.task_id,
+        ApprovalDecision.REJECT,
+        "Add a worked example before this can be used.",
+        "Dr Aslam",
+    )
+
+    revision = core.create_revision(original.task_id, "Dr Aslam")
+
+    assert rejected["status"] == TaskStatus.REJECTED.value
+    assert revision["status"] == TaskStatus.PENDING_APPROVAL.value
+    assert revision["revision_of"] == original.task_id
+    assert revision["revision_requested_by"] == "Dr Aslam"
+    assert revision["request"]["revision_note"] == "Add a worked example before this can be used."
+    assert revision["deliverables"] == []
+    assert revision["agent_trace"][-1]["kind"] == StepKind.REVISION_CREATED.value
+    assert core.store.get(original.task_id)["status"] == TaskStatus.REJECTED.value
+    with pytest.raises(TaskStateError, match="Only an approved task"):
+        core.execute(revision["task_id"])
+
+    core.decide(revision["task_id"], ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    executed = core.execute(revision["task_id"])
+    assert "## Revision context" in executed["deliverables"][0]["content"]
+    assert "Add a worked example" in executed["deliverables"][0]["content"]
+
+
+def test_revision_requires_a_final_rejection_with_reviewer_note(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    before_execution = core.create_task(TaskRequest(goal="Write a formal research report"))
+    core.decide(before_execution.task_id, ApprovalDecision.REJECT, "Do not draft this yet.", "Dr Aslam")
+
+    with pytest.raises(TaskStateError, match="final human review"):
+        core.create_revision(before_execution.task_id, "Dr Aslam")
+
+
 def test_only_approved_tasks_can_be_durably_queued_with_an_idempotent_trace(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))

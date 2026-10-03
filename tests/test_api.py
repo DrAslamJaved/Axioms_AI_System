@@ -21,6 +21,7 @@ from axioms.api import (
     RecoveryIn,
     ResearchBriefIn,
     ResearchDiscoveryIn,
+    RevisionIn,
     SimilarityScreenIn,
     SocialMediaPackageIn,
     WritingDraftIn,
@@ -48,6 +49,7 @@ from axioms.api import (
     create_research_brief_docx,
     create_social_media_package,
     create_social_media_package_docx,
+    create_task_revision,
     create_writing_draft,
     create_writing_draft_docx,
     decide_episodic_memory,
@@ -128,6 +130,29 @@ def test_recovery_handler_requires_attestation_and_returns_to_pending_approval(
     )
 
     assert recovered["status"] == TaskStatus.PENDING_APPROVAL.value
+
+
+def test_revision_handler_creates_a_separate_freshly_gated_task(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    original = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    test_core.decide(original.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    test_core.execute(original.task_id)
+    test_core.decide(
+        original.task_id,
+        ApprovalDecision.REJECT,
+        "Include a numerical example.",
+        "Dr Aslam",
+    )
+
+    revision = create_task_revision(
+        original.task_id,
+        RevisionIn(requested_by="Dr Aslam"),
+        principal=None,
+    )
+
+    assert revision["revision_of"] == original.task_id
+    assert revision["status"] == TaskStatus.PENDING_APPROVAL.value
 
 
 def test_lecture_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
