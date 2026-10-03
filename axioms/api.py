@@ -405,6 +405,7 @@ class MemoryDecisionIn(BaseModel):
     decision: MemoryDecision
     approved_by: str = Field(min_length=2, max_length=200)
     note: str | None = Field(default=None, max_length=2000)
+    retention_days: int = Field(default=30, ge=1, le=365)
 
 
 class MemoryDeleteIn(BaseModel):
@@ -543,6 +544,7 @@ def decide_episodic_memory(
             payload.decision,
             principal or payload.approved_by,
             payload.note,
+            retention_days=payload.retention_days,
         )
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Episodic-memory proposal not found") from error
@@ -574,6 +576,15 @@ def delete_episodic_memory(
         raise HTTPException(status_code=404, detail="Episodic-memory entry not found") from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.get("/episodic-memory/{memory_id}/audit")
+def audit_episodic_memory(memory_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    """Expose lifecycle provenance while never returning deleted or expired memory content."""
+    try:
+        return core.audit_episodic_memory(memory_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Episodic-memory audit record not found") from error
 
 
 @app.post("/similarity/screen")
