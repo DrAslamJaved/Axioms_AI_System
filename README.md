@@ -232,6 +232,20 @@ Use `GET /health` to verify authentication posture and provider status.
 Use `GET /system/readiness` for a full component report.
 Use authenticated `GET /operations/summary` for aggregate local task and worker-lease health; it is read-only and never runs or changes work.
 
+## Local backup and restore verification
+
+Backups are a named human operation, not a scheduled service. The helper refuses
+to overwrite an existing file, validates the backup through a disposable local
+restore, and never replaces the live database:
+
+```bash
+python scripts/backup_sqlite.py create --source data/axioms.sqlite3 --destination backups/axioms-2026-10-03.sqlite3
+python scripts/backup_sqlite.py verify-restore --backup backups/axioms-2026-10-03.sqlite3
+```
+
+Keep backup files outside version control and use an access-controlled storage
+location suitable for the institution's data-retention policy.
+
 ## Specialist agents
 
 | Agent | Endpoint | DOCX |
