@@ -107,6 +107,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "A read-only authenticated endpoint exposes aggregate task states and local worker-lease health; it cannot claim, renew, run, recover, or alter work.",
         ),
+        IntegrationComponent(
+            "SQLite backup restore drill",
+            IntegrationState.IMPLEMENTED,
+            "An explicit local CLI creates only new backups and validates a disposable restore copy; it never overwrites a live database or schedules backups.",
+        ),
         IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries require a separate owner decision, have a bounded retention period, expire into a minimal tombstone, and retain lifecycle provenance without deleted content."),
         IntegrationComponent("Similarity screening", IntegrationState.IMPLEMENTED, "Local token-shingle comparison against supplied texts; produces human-review signals, never a plagiarism verdict."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
