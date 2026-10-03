@@ -62,6 +62,10 @@ real tool use and optional LLM synthesis:
   completed task's specialist drafts. It checks declared draft-marker contracts
   and consolidates review signals without changing drafts, granting approval,
   or triggering publication, scheduling, messaging, or other external action.
+- **Approval-gated task revisions** let a named human create a separate linked
+  task only after final human rejection with a reviewer note. The original task
+  remains rejected; the new task carries the feedback as draft context and must
+  receive fresh approval before it can execute.
 - **Similarity screening** compares a draft only against texts the reviewer
   supplies, returning transparent overlap signals for human review. It is not a
   plagiarism verdict, originality determination, or web-wide search.
@@ -188,6 +192,13 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approval \
   -H "X-API-Key: your-secret" \
   -d '{"decision":"approve", "approved_by":"Dr Aslam", "note":"Final review complete"}'
 
+# After a final rejection with a reviewer note, create a separate revision task.
+# It is still held for fresh approval and does not rerun the rejected task.
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/revise \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"requested_by":"Dr Aslam"}'
+
 # Propose the completed non-sensitive episode for memory; a second decision is required.
 curl -X POST http://127.0.0.1:8000/tasks/{task_id}/memory-proposal \
   -H "X-API-Key: your-secret"
@@ -266,6 +277,7 @@ location suitable for the institution's data-retention policy.
 | STEM AI Portfolio | `POST /portfolio-packages`; `POST /portfolio-packages/agentic` | `POST /portfolio-packages/docx`; internal readiness review |
 | AutoEval | `POST /autoeval-reports` | `POST /autoeval-reports/docx` |
 | Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
+| Task revision | `POST /tasks/{task_id}/revise` after final rejection | Creates a linked new task; fresh approval remains required |
 
 ## System integration and readiness
 
