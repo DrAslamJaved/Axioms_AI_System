@@ -27,6 +27,7 @@ from axioms.api import (
     WritingDraftIn,
     audit_episodic_memory,
     cancel_task,
+    compare_task_revision,
     create_agentic_assessment_blueprint,
     create_agentic_content_review,
     create_agentic_portfolio_review,
@@ -171,6 +172,22 @@ def test_task_lineage_handler_returns_metadata_only_revision_family(tmp_path: Pa
     assert lineage["root_task_id"] == root.task_id
     assert [item["task_id"] for item in lineage["items"]] == [root.task_id, revision["task_id"]]
     assert "approval_note" not in lineage["items"][0]
+
+
+def test_revision_comparison_handler_returns_the_parent_diff(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    original = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    test_core.decide(original.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    test_core.execute(original.task_id)
+    test_core.decide(original.task_id, ApprovalDecision.REJECT, "Include an example.", "Dr Aslam")
+    revision = test_core.create_revision(original.task_id, "Dr Aslam")
+
+    comparison = compare_task_revision(revision["task_id"])
+
+    assert comparison["original_task_id"] == original.task_id
+    assert comparison["request_changes"][0]["field"] == "revision_note"
+    assert comparison["revision_governance"]["fresh_human_approval_required"]
 
 
 def test_lecture_docx_handler_returns_a_word_document(tmp_path: Path, monkeypatch) -> None:
