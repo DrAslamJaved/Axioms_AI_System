@@ -59,6 +59,7 @@ from axioms.api import (
     dispatch_approved_task,
     list_agents,
     list_personal_kb_entries,
+    list_tasks,
     operations_summary,
     propose_episodic_memory,
     recover_task,
@@ -545,6 +546,18 @@ def test_operations_summary_handler_exposes_read_only_aggregate_health(tmp_path:
     assert summary["tasks"][TaskStatus.PENDING_APPROVAL.value] == 1
     assert summary["dispatch"]["status_counts"]["queued"] == 0
     assert not summary["external_actions_enabled"]
+
+
+def test_task_list_handler_filters_a_read_only_human_work_queue(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+
+    page = list_tasks(status=TaskStatus.PENDING_APPROVAL, limit=10, cursor=None)
+
+    assert len(page["items"]) == 1
+    assert page["items"][0]["status"] == TaskStatus.PENDING_APPROVAL.value
+    assert page["next_cursor"] is None
 
 
 def test_personal_kb_handler_requires_a_recorded_approval() -> None:
