@@ -500,15 +500,26 @@ class AxiomsCore:
         )
 
     def decide_episodic_memory(
-        self, proposal_id: str, decision: MemoryDecision, decided_by: str, note: str | None = None
+        self,
+        proposal_id: str,
+        decision: MemoryDecision,
+        decided_by: str,
+        note: str | None = None,
+        *,
+        retention_days: int = 30,
     ) -> dict:
-        return self.memory_store.decide(proposal_id, decision, decided_by, note)
+        return self.memory_store.decide(
+            proposal_id, decision, decided_by, note, retention_days=retention_days
+        )
 
     def recall_episodic_memory(self, query: str, *, limit: int = 5) -> list[dict]:
         return self.memory_store.search(query, limit=limit)
 
     def delete_episodic_memory(self, memory_id: str, deleted_by: str, note: str | None = None) -> dict:
         return self.memory_store.delete(memory_id, deleted_by, note)
+
+    def audit_episodic_memory(self, memory_id: str) -> dict:
+        return self.memory_store.audit(memory_id)
 
     def create_cross_agent_autoeval(self, task_id: str) -> dict:
         """Add one deterministic, review-only quality report for completed graph drafts.
