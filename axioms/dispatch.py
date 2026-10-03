@@ -276,6 +276,39 @@ class DurableDispatchStore:
         assert result is not None
         return result
 
+    def operational_summary(self, *, now: datetime | None = None) -> dict:
+        """Return read-only local queue health; it never reclaims or runs a job."""
+        observed_at = now or datetime.now(UTC)
+        counts = {status.value: 0 for status in DispatchStatus}
+        active_leases = 0
+        expired_leases = 0
+        missing_leases = 0
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) AS count FROM dispatch_jobs GROUP BY status"
+            ).fetchall()
+            claimed = connection.execute(
+                "SELECT lease_expires_at FROM dispatch_jobs WHERE status = ?",
+                (DispatchStatus.CLAIMED.value,),
+            ).fetchall()
+        for row in rows:
+            counts[row["status"]] = row["count"]
+        for row in claimed:
+            lease = row["lease_expires_at"]
+            if lease is None:
+                missing_leases += 1
+            elif lease <= observed_at.isoformat():
+                expired_leases += 1
+            else:
+                active_leases += 1
+        return {
+            "observed_at": observed_at.isoformat(),
+            "status_counts": counts,
+            "active_lease_count": active_leases,
+            "expired_lease_count": expired_leases,
+            "missing_lease_count": missing_leases,
+        }
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()

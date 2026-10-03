@@ -5,7 +5,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-from axioms.models import TaskRecord
+from axioms.models import TaskRecord, TaskStatus
 
 
 def database_path() -> Path:
@@ -63,3 +63,16 @@ class TaskStore:
         with self._connect() as connection:
             row = connection.execute("SELECT payload FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return json.loads(row[0]) if row else None
+
+    def status_counts(self) -> dict[str, int]:
+        """Return aggregate task lifecycle counts without exposing task content."""
+        counts = {status.value: 0 for status in TaskStatus}
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT json_extract(payload, '$.status') AS status, COUNT(*) AS count "
+                "FROM tasks GROUP BY json_extract(payload, '$.status')"
+            ).fetchall()
+        for status, count in rows:
+            if status in counts:
+                counts[status] = count
+        return counts

@@ -59,6 +59,7 @@ from axioms.api import (
     dispatch_approved_task,
     list_agents,
     list_personal_kb_entries,
+    operations_summary,
     propose_episodic_memory,
     recover_task,
     run_one_dispatch_job,
@@ -532,6 +533,18 @@ def test_system_integration_handlers_expose_profiles_and_deferrals() -> None:
     assert len(agents) == 8
     assert readiness["specialist_agent_count"] == 8
     assert not readiness["external_actions_enabled"]
+
+
+def test_operations_summary_handler_exposes_read_only_aggregate_health(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+
+    summary = operations_summary()
+
+    assert summary["tasks"][TaskStatus.PENDING_APPROVAL.value] == 1
+    assert summary["dispatch"]["status_counts"]["queued"] == 0
+    assert not summary["external_actions_enabled"]
 
 
 def test_personal_kb_handler_requires_a_recorded_approval() -> None:

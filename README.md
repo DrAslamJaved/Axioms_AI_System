@@ -230,6 +230,7 @@ curl -X POST http://127.0.0.1:8000/research/discover \
 Use `GET /tasks/{task_id}` to inspect the plan, lifecycle state, drafts, and agent trace.
 Use `GET /health` to verify authentication posture and provider status.
 Use `GET /system/readiness` for a full component report.
+Use authenticated `GET /operations/summary` for aggregate local task and worker-lease health; it is read-only and never runs or changes work.
 
 ## Specialist agents
 

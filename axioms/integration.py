@@ -102,6 +102,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "A deterministic, hash-linked consolidation reviews completed local specialist drafts against declared marker contracts; it cannot alter drafts or grant release approval.",
         ),
+        IntegrationComponent(
+            "Local operations summary",
+            IntegrationState.IMPLEMENTED,
+            "A read-only authenticated endpoint exposes aggregate task states and local worker-lease health; it cannot claim, renew, run, recover, or alter work.",
+        ),
         IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries require a separate owner decision, have a bounded retention period, expire into a minimal tombstone, and retain lifecycle provenance without deleted content."),
         IntegrationComponent("Similarity screening", IntegrationState.IMPLEMENTED, "Local token-shingle comparison against supplied texts; produces human-review signals, never a plagiarism verdict."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
