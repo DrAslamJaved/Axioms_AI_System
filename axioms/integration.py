@@ -102,7 +102,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
             IntegrationState.IMPLEMENTED,
             "A deterministic, hash-linked consolidation reviews completed local specialist drafts against declared marker contracts; it cannot alter drafts or grant release approval.",
         ),
-        IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries are retained only after a separate owner decision; an owner can delete a searchable entry while a minimal tombstone records the deletion."),
+        IntegrationComponent("Consented episodic memory", IntegrationState.IMPLEMENTED, "Completed non-sensitive task summaries require a separate owner decision, have a bounded retention period, expire into a minimal tombstone, and retain lifecycle provenance without deleted content."),
         IntegrationComponent("Similarity screening", IntegrationState.IMPLEMENTED, "Local token-shingle comparison against supplied texts; produces human-review signals, never a plagiarism verdict."),
         IntegrationComponent("Local deployment", IntegrationState.IMPLEMENTED, "FastAPI, Streamlit, and Docker configuration are present."),
         IntegrationComponent("Redis Streams dispatch", IntegrationState.DEFERRED, "Requires distributed-worker deployment, leases, delayed retry, recovery, metrics, and operational tests."),
