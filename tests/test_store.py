@@ -28,6 +28,28 @@ def test_task_list_filters_and_paginates_without_skipping_the_cursor_item(tmp_pa
     assert second["next_cursor"] is None
 
 
+def test_task_list_projects_metadata_without_drafts_or_preference_values(tmp_path: Path) -> None:
+    store = TaskStore(tmp_path / "tasks.sqlite3")
+    record = TaskRecord(request=TaskRequest(goal="Sensitive research planning"), task_id="task_safe")
+    record.deliverables = []
+    record.preference_context = {
+        "lecture_design": [{"preference_value": "Owner-only preference", "proposal_id": "kbp_123"}]
+    }
+    record.reference_documents = [{"document_id": "doc_123", "sha256": "a" * 64}]
+    record.approval_note = "Private reviewer note"
+    store.save(record)
+
+    item = store.list(limit=10)["items"][0]
+
+    assert item["task_id"] == "task_safe"
+    assert item["preference_context_agents"] == ["lecture_design"]
+    assert item["reference_document_count"] == 1
+    assert "request" not in item
+    assert "deliverables" not in item
+    assert "preference_context" not in item
+    assert "approval_note" not in item
+
+
 def test_task_list_validates_status_limit_and_cursor(tmp_path: Path) -> None:
     store = TaskStore(tmp_path / "tasks.sqlite3")
 
