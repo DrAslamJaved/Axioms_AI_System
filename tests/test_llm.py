@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -30,7 +31,7 @@ def test_fake_provider_returns_responder_output() -> None:
     assert result.output_tokens == 0
 
 
-def test_anthropic_provider_preserves_provider_reported_token_counts(monkeypatch) -> None:
+def test_anthropic_provider_preserves_provider_reported_token_counts(tmp_path: Path, monkeypatch) -> None:
     response = SimpleNamespace(
         content=[SimpleNamespace(type="text", text="Complete")],
         stop_reason="end_turn",
@@ -42,11 +43,12 @@ def test_anthropic_provider_preserves_provider_reported_token_counts(monkeypatch
             self.messages = SimpleNamespace(create=lambda **_kwargs: response)
 
     monkeypatch.setitem(sys.modules, "anthropic", SimpleNamespace(Anthropic=FakeAnthropic))
+    monkeypatch.setenv("AXIOMS_DATABASE_URL", f"sqlite:///{tmp_path / 'usage.sqlite3'}")
     result = AnthropicProvider("test-key").complete([LLMMessage("user", "hello")])
     assert (result.input_tokens, result.output_tokens) == (21, 13)
 
 
-def test_openai_provider_preserves_provider_reported_token_counts(monkeypatch) -> None:
+def test_openai_provider_preserves_provider_reported_token_counts(tmp_path: Path, monkeypatch) -> None:
     response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content="Complete"), finish_reason="stop")],
         usage=SimpleNamespace(prompt_tokens=34, completion_tokens=8),
@@ -57,6 +59,7 @@ def test_openai_provider_preserves_provider_reported_token_counts(monkeypatch) -
             self.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
 
     monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setenv("AXIOMS_DATABASE_URL", f"sqlite:///{tmp_path / 'usage.sqlite3'}")
     result = OpenAIProvider("test-key").complete([LLMMessage("user", "hello")])
     assert (result.input_tokens, result.output_tokens) == (34, 8)
 
