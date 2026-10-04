@@ -43,6 +43,7 @@ class AccessRole(StrEnum):
 
 
 _ROLE_RANK = {AccessRole.VIEWER: 0, AccessRole.APPROVER: 1, AccessRole.ADMIN: 2}
+_EXTERNAL_LLM_PROVIDERS = frozenset({"anthropic", "openai"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,3 +233,23 @@ def require_role(required: AccessRole) -> Callable[[str | None], None]:
         require_api_key(x_api_key)
 
     return dependency
+
+
+def require_external_provider_consent(
+    x_axioms_allow_external_provider: str | None = Header(
+        default=None, alias="X-Axioms-Allow-External-Provider"
+    ),
+) -> None:
+    """Require an explicit request signal before a configured external LLM is used.
+
+    The disabled provider and local deterministic fallbacks remain available
+    without this header. A configured Anthropic or OpenAI provider is external,
+    so the authorized human caller must opt in for each request.
+    """
+    provider = os.getenv("AXIOMS_LLM_PROVIDER", "disabled").strip().casefold()
+    consented = (x_axioms_allow_external_provider or "").strip().casefold() in {"1", "true", "yes"}
+    if provider in _EXTERNAL_LLM_PROVIDERS and not consented:
+        raise HTTPException(
+            status_code=428,
+            detail="External LLM use requires X-Axioms-Allow-External-Provider: true for this request.",
+        )
