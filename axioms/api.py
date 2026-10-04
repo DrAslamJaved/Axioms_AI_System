@@ -1153,7 +1153,10 @@ def dispatch_approved_task(
 
 
 @app.get("/dispatch/jobs/{job_id}")
-def get_dispatch_job(job_id: str, _auth: None = Depends(require_api_key)) -> dict:
+def get_dispatch_job(
+    job_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Return detailed local dispatch state only to an authorized human reviewer."""
     job = core.dispatch_store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Dispatch job not found")
