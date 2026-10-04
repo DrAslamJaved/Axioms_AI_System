@@ -23,13 +23,10 @@ def _lecture_body(outcomes: int = 2) -> dict:
     }
 
 
-def test_health_reports_posture_and_needs_no_auth() -> None:
+def test_health_is_a_public_liveness_probe_without_configuration_details() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    body = response.json()
-    assert body["auth"] == "open-dev"
-    assert body["llm_provider"] == "disabled"
-    assert body["approval_mode"] == "strict"
+    assert response.json() == {"status": "ok"}
 
 
 def test_lecture_plan_validation_rejects_too_few_outcomes() -> None:
@@ -208,11 +205,11 @@ def test_named_key_principal_overrides_body_approver(monkeypatch) -> None:
     assert approved.json()["approved_by"] == "Dr Aslam"
 
 
-def test_health_reports_named_auth_mode(monkeypatch) -> None:
+def test_health_does_not_disclose_named_auth_mode(monkeypatch) -> None:
     monkeypatch.setenv("AXIOMS_API_KEYS", json.dumps({"Dr Aslam": "key1"}))
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["auth"] == "named"
+    assert response.json() == {"status": "ok"}
 
 
 def test_named_viewer_can_access_queue_metadata_but_not_content_bearing_task_details(monkeypatch) -> None:
