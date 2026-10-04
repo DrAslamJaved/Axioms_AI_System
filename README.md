@@ -101,8 +101,8 @@ real tool use and optional LLM synthesis:
   translation remains subject to human subject-matter review before publication.
 - **Reference-document ingestion** accepts explicitly confirmed non-sensitive
   PDF, DOCX, and UTF-8 text files into local storage with size and extraction
-  limits. It returns metadata only: ingestion never attaches text to an agent
-  or sends it to an external provider.
+  limits. An approver can attach immutable document metadata to a task before
+  execution approval, but no text is injected into an agent or sent externally.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.
@@ -280,6 +280,13 @@ curl -X POST http://127.0.0.1:8000/documents \
   -H "X-API-Key: your-secret" \
   -F "document=@approved_reference.pdf" \
   -F "confirmed_non_sensitive=true"
+
+# Record the document metadata on a task before the task is approved. This
+# creates provenance only; the extracted text remains unavailable to agents.
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/reference-documents \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret" \
+  -d '{"document_id":"doc_example","attached_by":"Dr Aslam"}'
 ```
 
 Use `GET /tasks/{task_id}` to inspect the plan, lifecycle state, drafts, and agent trace.

@@ -21,12 +21,14 @@ from axioms.api import (
     PreferenceProposalIn,
     ProposalDecisionIn,
     RecoveryIn,
+    ReferenceDocumentAttachmentIn,
     ResearchBriefIn,
     ResearchDiscoveryIn,
     RevisionIn,
     SimilarityScreenIn,
     SocialMediaPackageIn,
     WritingDraftIn,
+    attach_reference_document,
     audit_episodic_memory,
     cancel_task,
     compare_task_revision,
@@ -110,6 +112,22 @@ def test_document_ingestion_handler_returns_metadata_without_exposing_text(tmp_p
     assert payload["filename"] == "reference.txt"
     assert payload["char_count"] == len("Approved research context")
     assert "content" not in payload
+
+
+def test_reference_document_attachment_handler_records_only_metadata(tmp_path: Path, monkeypatch) -> None:
+    local_core = AxiomsCore(TaskStore(tmp_path / "tasks.sqlite3"))
+    local_documents = DocumentStore(tmp_path / "tasks.sqlite3")
+    monkeypatch.setattr(api, "core", local_core)
+    monkeypatch.setattr(api, "document_store", local_documents)
+    document = local_documents.ingest(b"Approved reference context", "reference.txt", confirmed_non_sensitive=True)
+    task = local_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    result = attach_reference_document(
+        task.task_id,
+        ReferenceDocumentAttachmentIn(document_id=document.document_id, attached_by="Dr Aslam"),
+        principal=None,
+    )
+    assert result["reference_documents"][0]["document_id"] == document.document_id
+    assert "content" not in result["reference_documents"][0]
 
 
 def test_cancel_handler_stops_an_approved_task(tmp_path: Path, monkeypatch) -> None:
