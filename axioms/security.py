@@ -22,6 +22,9 @@ from __future__ import annotations
 import hmac
 import json
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
 
 from fastapi import Header, HTTPException
 
@@ -30,8 +33,30 @@ class SecurityConfigurationError(ValueError):
     """Raised when AXIOMS_API_KEYS is present but unsafe or invalid."""
 
 
-def _named_keys() -> dict[str, str] | None:
-    """Parse ``AXIOMS_API_KEYS`` (JSON object: principal → secret)."""
+class AccessRole(StrEnum):
+    """Minimum authority for a named API key."""
+
+    VIEWER = "viewer"
+    APPROVER = "approver"
+    ADMIN = "admin"
+
+
+_ROLE_RANK = {AccessRole.VIEWER: 0, AccessRole.APPROVER: 1, AccessRole.ADMIN: 2}
+
+
+@dataclass(frozen=True, slots=True)
+class NamedCredential:
+    secret: str
+    role: AccessRole
+
+
+def _named_credentials() -> dict[str, NamedCredential] | None:
+    """Parse legacy and role-bearing ``AXIOMS_API_KEYS`` formats fail-closed.
+
+    Legacy ``{"Principal": "secret"}`` entries remain administrator-equivalent
+    for compatibility. New entries must explicitly provide ``secret`` and
+    ``role``, for example ``{"Principal": {"secret": "...", "role": "approver"}}``.
+    """
     raw = os.getenv("AXIOMS_API_KEYS", "").strip()
     if not raw:
         return None
@@ -41,28 +66,65 @@ def _named_keys() -> dict[str, str] | None:
         raise SecurityConfigurationError("AXIOMS_API_KEYS must contain valid JSON.") from error
     if not isinstance(mapping, dict) or not mapping:
         raise SecurityConfigurationError("AXIOMS_API_KEYS must be a non-empty JSON object.")
-    if any(
-        not isinstance(principal, str)
-        or not principal.strip()
-        or not isinstance(secret, str)
-        or not secret.strip()
-        for principal, secret in mapping.items()
-    ):
-        raise SecurityConfigurationError(
-            "AXIOMS_API_KEYS principals and secrets must be non-empty strings."
-        )
-    normalised = {principal.strip(): secret for principal, secret in mapping.items()}
+
+    normalised: dict[str, NamedCredential] = {}
+    for principal, value in mapping.items():
+        if not isinstance(principal, str) or not principal.strip():
+            raise SecurityConfigurationError("AXIOMS_API_KEYS principals must be non-empty strings.")
+        if isinstance(value, str):
+            credential = NamedCredential(secret=value, role=AccessRole.ADMIN)
+        elif isinstance(value, dict):
+            if set(value) != {"secret", "role"}:
+                raise SecurityConfigurationError(
+                    "Role-bearing AXIOMS_API_KEYS entries require exactly 'secret' and 'role'."
+                )
+            secret, role = value["secret"], value["role"]
+            if not isinstance(secret, str) or not secret.strip() or not isinstance(role, str):
+                raise SecurityConfigurationError(
+                    "Role-bearing AXIOMS_API_KEYS entries require non-empty string secret and role."
+                )
+            try:
+                credential = NamedCredential(secret=secret, role=AccessRole(role.strip().casefold()))
+            except ValueError as error:
+                valid = ", ".join(role.value for role in AccessRole)
+                raise SecurityConfigurationError(
+                    f"AXIOMS_API_KEYS role must be one of: {valid}."
+                ) from error
+        else:
+            raise SecurityConfigurationError(
+                "AXIOMS_API_KEYS values must be legacy secrets or role-bearing objects."
+            )
+        if not credential.secret.strip():
+            raise SecurityConfigurationError("AXIOMS_API_KEYS secrets must be non-empty strings.")
+        normalised[principal.strip()] = credential
     if len(normalised) != len(mapping):
         raise SecurityConfigurationError("AXIOMS_API_KEYS contains duplicate principal names.")
-    if len(set(normalised.values())) != len(normalised):
+    if len({credential.secret for credential in normalised.values()}) != len(normalised):
         raise SecurityConfigurationError("AXIOMS_API_KEYS must not reuse a secret across principals.")
     return normalised
+
+
+def _named_keys() -> dict[str, str] | None:
+    """Return the legacy principal → secret view used by existing integrations."""
+    credentials = _named_credentials()
+    return {principal: item.secret for principal, item in credentials.items()} if credentials else None
 
 
 def _named_keys_or_service_error() -> dict[str, str] | None:
     """Return named keys or fail protected operations closed with HTTP 503."""
     try:
         return _named_keys()
+    except SecurityConfigurationError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication is misconfigured; protected operations are unavailable.",
+        ) from error
+
+
+def _named_credentials_or_service_error() -> dict[str, NamedCredential] | None:
+    """Return role-bearing named credentials or fail protected operations closed with HTTP 503."""
+    try:
+        return _named_credentials()
     except SecurityConfigurationError as error:
         raise HTTPException(
             status_code=503,
@@ -123,10 +185,49 @@ def resolve_principal(x_api_key: str | None = Header(default=None, alias="X-API-
     This is the identity recorded for approvals -- it cannot be self-asserted.
     """
 
-    named = _named_keys_or_service_error()
+    named = _named_credentials_or_service_error()
     if not named or not x_api_key:
         return None
-    for principal, secret in named.items():
-        if hmac.compare_digest(x_api_key, secret):
+    for principal, credential in named.items():
+        if hmac.compare_digest(x_api_key, credential.secret):
             return principal
     return None
+
+
+def resolve_role(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> AccessRole | None:
+    """Return the named-key role, or ``None`` for legacy single-key/open-development modes."""
+    named = _named_credentials_or_service_error()
+    if not named or not x_api_key:
+        return None
+    for credential in named.values():
+        if hmac.compare_digest(x_api_key, credential.secret):
+            return credential.role
+    return None
+
+
+def ensure_role(role: AccessRole | None, required: AccessRole) -> None:
+    """Reject an authenticated named principal below the required authority.
+
+    ``None`` is deliberately compatible with open-development and legacy
+    single-key modes; production named-key deployments receive the separation.
+    """
+    if role is not None and _ROLE_RANK[role] < _ROLE_RANK[required]:
+        raise HTTPException(status_code=403, detail=f"This operation requires the {required.value} role.")
+
+
+def require_role(required: AccessRole) -> Callable[[str | None], None]:
+    """Create a FastAPI dependency for a minimum named-key role."""
+
+    def dependency(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
+        named = _named_credentials_or_service_error()
+        if named:
+            if not x_api_key:
+                raise HTTPException(status_code=401, detail="Missing or invalid API key.")
+            for credential in named.values():
+                if hmac.compare_digest(x_api_key, credential.secret):
+                    ensure_role(credential.role, required)
+                    return
+            raise HTTPException(status_code=401, detail="Missing or invalid API key.")
+        require_api_key(x_api_key)
+
+    return dependency

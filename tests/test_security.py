@@ -4,13 +4,16 @@ import pytest
 from fastapi import HTTPException
 
 from axioms.security import (
+    AccessRole,
     SecurityConfigurationError,
     _named_keys,
     auth_enabled,
     auth_mode,
     configured_api_key,
     require_api_key,
+    require_role,
     resolve_principal,
+    resolve_role,
 )
 
 # ---------------------------------------------------------------------------
@@ -63,6 +66,44 @@ def test_named_keys_parses_valid_json(monkeypatch) -> None:
     monkeypatch.setenv("AXIOMS_API_KEYS", json.dumps({"Dr Aslam": "key1", "Lab TA": "key2"}))
     result = _named_keys()
     assert result == {"Dr Aslam": "key1", "Lab TA": "key2"}
+
+
+def test_role_bearing_named_keys_normalise_with_legacy_administrator_compatibility(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Dr Aslam": {"secret": "admin-key", "role": "admin"},
+                "Reviewer": {"secret": "approver-key", "role": "approver"},
+                "Observer": {"secret": "viewer-key", "role": "viewer"},
+                "Legacy": "legacy-key",
+            }
+        ),
+    )
+    assert _named_keys() == {
+        "Dr Aslam": "admin-key",
+        "Reviewer": "approver-key",
+        "Observer": "viewer-key",
+        "Legacy": "legacy-key",
+    }
+    assert resolve_role("admin-key") is AccessRole.ADMIN
+    assert resolve_role("approver-key") is AccessRole.APPROVER
+    assert resolve_role("viewer-key") is AccessRole.VIEWER
+    assert resolve_role("legacy-key") is AccessRole.ADMIN
+
+
+def test_role_bearing_named_keys_reject_unsafe_role_objects(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS", json.dumps({"Reviewer": {"secret": "key", "role": "owner"}})
+    )
+    with pytest.raises(SecurityConfigurationError, match="role must be one of"):
+        _named_keys()
+
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS", json.dumps({"Reviewer": {"secret": "key", "role": "viewer", "extra": 1}})
+    )
+    with pytest.raises(SecurityConfigurationError, match="exactly 'secret' and 'role'"):
+        _named_keys()
 
 
 def test_named_keys_rejects_invalid_json(monkeypatch) -> None:
@@ -165,3 +206,22 @@ def test_named_key_correct_key_is_accepted(monkeypatch) -> None:
     monkeypatch.delenv("AXIOMS_API_KEY", raising=False)
     assert require_api_key("key1") is None
     assert require_api_key("key2") is None
+
+
+def test_role_dependency_rejects_viewer_but_admits_approver_and_admin(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Approver": {"secret": "approve", "role": "approver"},
+                "Viewer": {"secret": "view", "role": "viewer"},
+                "Admin": {"secret": "admin", "role": "admin"},
+            }
+        ),
+    )
+    dependency = require_role(AccessRole.APPROVER)
+    with pytest.raises(HTTPException) as excinfo:
+        dependency("view")
+    assert excinfo.value.status_code == 403
+    assert dependency("approve") is None
+    assert dependency("admin") is None
