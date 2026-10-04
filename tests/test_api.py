@@ -724,6 +724,14 @@ def test_system_integration_handlers_expose_profiles_and_deferrals() -> None:
     assert not readiness["external_actions_enabled"]
 
 
+def test_generated_api_docs_are_disabled_by_default_and_opt_in_is_explicit(monkeypatch) -> None:
+    public_paths = {route.path for route in api.app.routes if hasattr(route, "path")}
+    assert {"/docs", "/redoc", "/openapi.json"}.isdisjoint(public_paths)
+
+    monkeypatch.setenv("AXIOMS_ENABLE_API_DOCS", "true")
+    assert api.api_docs_enabled()
+
+
 def test_operations_summary_handler_exposes_read_only_aggregate_health(tmp_path: Path, monkeypatch) -> None:
     test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
     monkeypatch.setattr(api, "core", test_core)
