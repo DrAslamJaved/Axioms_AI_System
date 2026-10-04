@@ -13,6 +13,7 @@ from axioms.assessment_agent import (
     export_instructor_docx,
     export_student_docx,
 )
+from axioms.llm import DisabledProvider, FakeProvider
 
 
 def request() -> AssessmentRequest:
@@ -37,6 +38,43 @@ def test_blueprint_allocates_all_marks_and_maps_outcomes() -> None:
     assert blueprint.allocated_marks == 20
     assert [question.outcome_id for question in blueprint.questions] == ["LO1", "LO2"]
     assert all(question.required_evidence for question in blueprint.questions)
+
+
+def test_disabled_llm_retains_the_deterministic_instructor_blueprint() -> None:
+    blueprint = build_assessment_blueprint(request(), provider=DisabledProvider())
+
+    assert "Create one single-part, instructor-reviewed item" in blueprint.questions[0].prompt_framework
+    assert blueprint.allocated_marks == 20
+
+
+def test_fake_llm_enriches_internal_frameworks_without_changing_assessment_controls() -> None:
+    response = "\n---\n".join(
+        f"Internal instructor planning note {index} preserves the approved source boundary."
+        for index in range(1, 3)
+    )
+    captured_messages = []
+    provider = FakeProvider(lambda messages: (captured_messages.extend(messages), response)[1])
+
+    blueprint = build_assessment_blueprint(request(), provider=provider)
+
+    assert [question.marks for question in blueprint.questions] == [10, 10]
+    assert [question.outcome_id for question in blueprint.questions] == ["LO1", "LO2"]
+    assert blueprint.questions[0].prompt_framework.startswith("Internal instructor planning note 1")
+    assert blueprint.instructor_review_required
+    assert "Instructor-approved lecture notes" in captured_messages[1].content
+    assert "Learning outcomes:" in captured_messages[1].content
+
+
+def test_malformed_or_failed_llm_output_retains_the_instructor_blueprint() -> None:
+    malformed = build_assessment_blueprint(request(), provider=FakeProvider(lambda _messages: "unstructured response"))
+
+    def fail(_messages) -> str:
+        raise RuntimeError("provider unavailable")
+
+    failed = build_assessment_blueprint(request(), provider=FakeProvider(fail))
+
+    assert "Create one single-part, instructor-reviewed item" in malformed.questions[0].prompt_framework
+    assert "Create one single-part, instructor-reviewed item" in failed.questions[0].prompt_framework
 
 
 def test_quiz_blueprint_rejects_more_than_two_items() -> None:
