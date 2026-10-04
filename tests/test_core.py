@@ -52,6 +52,32 @@ def test_approved_scoped_preferences_are_snapshotted_and_injected_only_into_matc
     assert "do not override evidence" in drafts[AgentName.LECTURE.value]
 
 
+def test_reference_document_attachment_is_metadata_only_and_locked_before_approval(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    document = {
+        "document_id": "doc_123456789abc",
+        "filename": "approved_reference.pdf",
+        "media_type": "application/pdf",
+        "char_count": 500,
+        "sha256": "a" * 64,
+    }
+    attached = core.attach_reference_document(record.task_id, document, attached_by="Dr Aslam")
+    assert attached["reference_documents"] == [
+        {
+            **document,
+            "attached_by": "Dr Aslam",
+            "attached_at": attached["reference_documents"][0]["attached_at"],
+        }
+    ]
+    assert attached["agent_trace"][-1]["kind"] is StepKind.REFERENCE_DOCUMENT_ATTACHED
+    assert "no content was injected" in attached["agent_trace"][-1]["summary"]
+
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    with pytest.raises(TaskStateError, match="only before"):
+        core.attach_reference_document(record.task_id, document, attached_by="Dr Aslam")
+
+
 def test_approved_task_executes_then_requires_final_review(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Write a formal research report"))
