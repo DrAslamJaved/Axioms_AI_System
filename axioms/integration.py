@@ -44,16 +44,16 @@ def build_system_readiness_report() -> SystemReadinessReport:
             "Pluggable Anthropic/OpenAI backends with a DisabledProvider safe default; all specialist agents use bounded synthesis where configured, while AutoEval keeps deterministic checks authoritative and limits LLM use to an optional qualitative summary.",
         ),
         IntegrationComponent("Crossref DOI verification", IntegrationState.IMPLEMENTED, "Real external metadata verification tool with injectable transport for offline testing."),
-        IntegrationComponent("Tavily evidence discovery", IntegrationState.IMPLEMENTED, "Read-only search candidates with provenance and an explicit verification boundary; disabled until configured."),
+        IntegrationComponent("Tavily evidence discovery", IntegrationState.IMPLEMENTED, "Read-only search candidates with provenance and an explicit verification boundary; disabled until configured and restricted to approvers or administrators in named-key deployments."),
         IntegrationComponent(
             "arXiv preprint discovery",
             IntegrationState.IMPLEMENTED,
-            "Read-only Atom discovery with bounded results, in-process cache, rate gate, provenance, and an explicit preprint-verification boundary.",
+            "Read-only Atom discovery with bounded results, in-process cache, rate gate, provenance, and an explicit preprint-verification boundary; external lookup is restricted to approvers or administrators in named-key deployments.",
         ),
         IntegrationComponent(
             "Semantic Scholar discovery",
             IntegrationState.IMPLEMENTED,
-            "Keyed, read-only bibliographic discovery with bounded results, in-process cache, rate gate, provenance, and independent-verification boundary.",
+            "Keyed, read-only bibliographic discovery with bounded results, in-process cache, rate gate, provenance, and independent-verification boundary; external lookup is restricted to approvers or administrators in named-key deployments.",
         ),
         IntegrationComponent("Agentic research agent", IntegrationState.IMPLEMENTED, "Tool-using, LLM-synthesising research vertical with bounded generation and AutoEval guardrail."),
         IntegrationComponent(
