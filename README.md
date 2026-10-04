@@ -196,6 +196,7 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | --- | --- | --- |
 | `AXIOMS_API_KEY` | Single shared API secret (legacy mode) | unset (open-dev) |
 | `AXIOMS_API_KEYS` | Named API keys. Legacy `{"Dr Aslam": "key1"}` entries remain administrator-equivalent; prefer `{"Dr Aslam":{"secret":"key1","role":"admin"}}` | unset |
+| `AXIOMS_ENABLE_API_DOCS` | Enables generated OpenAPI/schema pages only for trusted local development | `false` |
 | `AXIOMS_APPROVAL_MODE` | `strict` (all drafts gated) or `risk_based` (low-risk planned directly) | `strict` |
 | `AXIOMS_MAX_PARALLEL_WORKERS` | Local cap for explicit `parallel=true` drafting (1–4) | `2` |
 | `AXIOMS_LLM_PROVIDER` | `disabled`, `anthropic`, or `openai` | `disabled` |
@@ -415,6 +416,9 @@ are rejected from KB records.
 Local Docker deployment and the release checklist are in
 [docs/deployment.md](docs/deployment.md). Start with Docker Compose; do not deploy
 with real keys or enable external integrations until the security checklist is complete.
+Generated API documentation is disabled by default. For a trusted local
+development session only, set `AXIOMS_ENABLE_API_DOCS=true` before starting the
+API; do not expose the resulting schema or interactive pages publicly.
 
 ## Safety principles
 

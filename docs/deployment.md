@@ -13,9 +13,14 @@ docker compose ps
 .\scripts\smoke_test_windows.ps1
 ```
 
-Visit `http://localhost:8000/docs` for API documentation and `http://localhost:8501` for
-the review UI. The API container must first become healthy; the UI then starts. The local SQLite
-volume persists tasks between containers. Stop the local stack with `docker compose down`.
+Visit `http://localhost:8501` for the review UI. The API container must first
+become healthy; the UI then starts. The local SQLite volume persists tasks
+between containers. Stop the local stack with `docker compose down`.
+
+Generated API documentation is disabled by default. Only for a trusted local
+development session, set `AXIOMS_ENABLE_API_DOCS=true` in `.env` before
+starting the stack, then visit `http://localhost:8000/docs`. Do not enable or
+expose these generated schema pages in a deployed environment.
 
 ## 2. GitHub release workflow
 

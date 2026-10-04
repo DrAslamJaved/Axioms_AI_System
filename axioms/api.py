@@ -107,7 +107,19 @@ from axioms.usage import UsageStore
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
-app = FastAPI(title="Axioms AI System", version="0.2.0")
+
+def api_docs_enabled() -> bool:
+    """Allow generated API documentation only when explicitly enabled locally."""
+    return os.getenv("AXIOMS_ENABLE_API_DOCS", "false").strip().casefold() in {"1", "true", "yes"}
+
+
+app = FastAPI(
+    title="Axioms AI System",
+    version="0.2.0",
+    docs_url="/docs" if api_docs_enabled() else None,
+    redoc_url="/redoc" if api_docs_enabled() else None,
+    openapi_url="/openapi.json" if api_docs_enabled() else None,
+)
 core = AxiomsCore()
 document_store = DocumentStore()
 _ARXIV_CLIENT = ArxivClient()
