@@ -125,6 +125,20 @@ def test_task_carries_risk_tier_and_policy_reason() -> None:
     assert "External" in body["policy_reason"]
 
 
+def test_task_status_endpoint_is_pollable_and_excludes_task_content() -> None:
+    created = client.post("/tasks", json={"goal": "Prepare a lecture on spectral graph theory"})
+    task_id = created.json()["task_id"]
+
+    response = client.get(f"/tasks/{task_id}/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["task_id"] == task_id
+    assert body["status"] == "pending_approval"
+    assert "request" not in body
+    assert "deliverables" not in body
+
+
 # ---------------------------------------------------------------------------
 # Blocking enforcement for HIGH-risk tasks
 # ---------------------------------------------------------------------------

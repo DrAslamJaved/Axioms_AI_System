@@ -69,6 +69,7 @@ from axioms.api import (
     discover_semantic_scholar_papers,
     dispatch_approved_task,
     get_task_lineage,
+    get_task_status,
     ingest_document,
     list_agents,
     list_personal_kb_entries,
@@ -742,6 +743,25 @@ def test_task_list_handler_filters_a_read_only_human_work_queue(tmp_path: Path, 
     assert "request" not in page["items"][0]
     assert "deliverables" not in page["items"][0]
     assert page["next_cursor"] is None
+
+
+def test_task_status_handler_returns_pollable_metadata_only(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+
+    status = get_task_status(record.task_id)
+
+    assert status == {
+        "task_id": record.task_id,
+        "created_at": record.created_at,
+        "status": TaskStatus.PENDING_APPROVAL.value,
+        "risk_tier": "low",
+        "deliverable_count": 0,
+        "final_review_required": False,
+    }
+    assert "request" not in status
+    assert "agent_trace" not in status
 
 
 def test_personal_kb_handler_requires_a_recorded_approval() -> None:

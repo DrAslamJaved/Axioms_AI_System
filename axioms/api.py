@@ -1070,6 +1070,23 @@ def list_tasks(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+@app.get("/tasks/{task_id}/status")
+def get_task_status(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    """Return safe lifecycle metadata for polling; never task requests, drafts, or notes."""
+    task = core.store.get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    status = TaskStatus(task["status"])
+    return {
+        "task_id": task["task_id"],
+        "created_at": task["created_at"],
+        "status": status.value,
+        "risk_tier": task.get("risk_tier"),
+        "deliverable_count": len(task.get("deliverables", [])),
+        "final_review_required": status is TaskStatus.AWAITING_REVIEW,
+    }
+
+
 @app.get("/tasks/{task_id}")
 def get_task(task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
     """Return a content-bearing task record only to an authorized reviewer."""
