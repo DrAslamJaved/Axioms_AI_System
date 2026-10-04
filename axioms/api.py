@@ -1071,7 +1071,8 @@ def list_tasks(
 
 
 @app.get("/tasks/{task_id}")
-def get_task(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+def get_task(task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
+    """Return a content-bearing task record only to an authorized reviewer."""
     task = core.store.get(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
