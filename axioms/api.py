@@ -1087,6 +1087,15 @@ def get_task_status(task_id: str, _auth: None = Depends(require_api_key)) -> dic
     }
 
 
+@app.get("/tasks/{task_id}/trace")
+def get_task_trace(task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
+    """Return an approver-only, content-free lifecycle trace; this endpoint cannot act on a task."""
+    try:
+        return core.task_trace(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+
+
 @app.get("/tasks/{task_id}")
 def get_task(task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
     """Return a content-bearing task record only to an authorized reviewer."""
