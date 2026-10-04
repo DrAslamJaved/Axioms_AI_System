@@ -25,9 +25,7 @@ with st.sidebar:
     st.caption("System posture")
     try:
         health = requests.get(f"{API_URL}/health", timeout=10).json()
-        st.write(f"Auth: **{health.get('auth', 'unknown')}**")
-        st.write(f"LLM: **{health.get('llm_provider', 'unknown')}**")
-        st.write(f"Approval: **{health.get('approval_mode', 'unknown')}**")
+        st.write(f"Service: **{health.get('status', 'unknown')}**")
     except Exception:  # noqa: BLE001
         st.warning("Cannot reach the API server.")
 
@@ -60,21 +58,24 @@ def _task_queue_url(*, status: str, limit: int, cursor: str | None = None) -> st
 # --- System readiness ---
 
 with st.expander("System integration readiness", expanded=False):
-    try:
-        readiness_response = _get(f"{API_URL}/system/readiness")
-        readiness_response.raise_for_status()
-        readiness = readiness_response.json()
-        st.write(f"Implemented specialist agents: {readiness['specialist_agent_count']}")
-        st.dataframe(
-            [
-                {"Component": item["name"], "State": item["state"], "Detail": item["detail"]}
-                for item in readiness["components"]
-            ],
-            hide_index=True,
-            use_container_width=True,
-        )
-    except Exception as error:  # noqa: BLE001
-        st.error(f"Could not load readiness report: {error}")
+    if not api_key:
+        st.info("Enter an approver or administrator API key to inspect detailed readiness.")
+    else:
+        try:
+            readiness_response = _get(f"{API_URL}/system/readiness")
+            readiness_response.raise_for_status()
+            readiness = readiness_response.json()
+            st.write(f"Implemented specialist agents: {readiness['specialist_agent_count']}")
+            st.dataframe(
+                [
+                    {"Component": item["name"], "State": item["state"], "Detail": item["detail"]}
+                    for item in readiness["components"]
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+        except Exception as error:  # noqa: BLE001
+            st.error(f"Could not load readiness report: {error}")
 
 # --- Manual task status inspector ---
 
