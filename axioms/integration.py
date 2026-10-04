@@ -37,7 +37,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent("Axioms Core runtime", IntegrationState.IMPLEMENTED, "Persisted plan → approval → execution → final-review lifecycle with per-step agent traces."),
         IntegrationComponent("Specialist registry", IntegrationState.IMPLEMENTED, "Eight review-first profiles with API endpoints."),
         IntegrationComponent("Human approval boundary", IntegrationState.IMPLEMENTED, "Risk-tier classification (LOW/ELEVATED/HIGH) with blocking enforcement on HIGH-risk tasks."),
-        IntegrationComponent("API-key authentication", IntegrationState.IMPLEMENTED, "Named role-bearing keys distinguish viewers, approvers, and administrators; principal resolution binds approval and memory-governance decisions to the authenticated named key, while only administrators may override a HIGH-risk block."),
+        IntegrationComponent("API-key authentication", IntegrationState.IMPLEMENTED, "Named role-bearing keys distinguish viewers, approvers, and administrators; viewers receive only authenticated aggregate and metadata GET projections, principal resolution binds approval and memory-governance decisions to the authenticated named key, and only administrators may override a HIGH-risk block."),
         IntegrationComponent(
             "LLM provider seam",
             IntegrationState.IMPLEMENTED,
