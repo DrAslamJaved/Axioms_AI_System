@@ -122,6 +122,11 @@ def build_system_readiness_report() -> SystemReadinessReport:
             "Authenticated reviewers can compare a linked revision with its direct parent, including the recorded rejection note and typed request differences; it cannot approve, edit, or execute either task.",
         ),
         IntegrationComponent(
+            "Approved PKB preference injection",
+            IntegrationState.IMPLEMENTED,
+            "Owner-approved preferences can be scoped to specialist agents, snapshotted into a proposed task, and appended only to matching local review drafts; they never become facts or bypass governance.",
+        ),
+        IntegrationComponent(
             "Local operations summary",
             IntegrationState.IMPLEMENTED,
             "A read-only authenticated endpoint exposes aggregate task states and local worker-lease health; it cannot claim, renew, run, recover, or alter work.",

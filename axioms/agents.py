@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from axioms.agent_registry import profile_for
 from axioms.models import AgentName, Deliverable, TaskRequest
 
@@ -135,3 +137,20 @@ def specialist_draft(request: TaskRequest, agent: AgentName) -> Deliverable:
 - No external action, publication, schedule, account access, or data release is performed.
 """
     return Deliverable(title=title, agent=agent, content=content)
+
+
+def apply_approved_preferences(draft: Deliverable, preferences: list[dict[str, Any]]) -> Deliverable:
+    """Append only owner-approved, task-snapshotted preferences without treating them as facts or instructions to act."""
+    if not preferences:
+        return draft
+    lines = [
+        "## Owner-approved preferences (snapshotted at planning)",
+        "- Apply these preferences only where relevant to this review draft.",
+        "- They are not verified facts and do not override evidence, data-governance, safety, or human-approval requirements.",
+    ]
+    lines.extend(
+        f"- {entry['category']}.{entry['preference_key']}: {entry['preference_value']}"
+        for entry in preferences
+    )
+    draft.content += "\n\n" + "\n".join(lines)
+    return draft

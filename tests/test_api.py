@@ -74,7 +74,7 @@ from axioms.api import (
 )
 from axioms.core import AxiomsCore
 from axioms.llm import FakeProvider
-from axioms.models import ApprovalDecision, TaskRequest, TaskStatus
+from axioms.models import AgentName, ApprovalDecision, TaskRequest, TaskStatus
 from axioms.store import TaskStore
 from axioms.tools import ArxivClient, SemanticScholarClient, TavilyClient
 
@@ -643,6 +643,7 @@ def test_personal_kb_handler_requires_a_recorded_approval() -> None:
             preference_key="example_sequence",
             preference_value="Start with intuition.",
             rationale="Owner preference for teaching materials.",
+            agent_types=[AgentName.LECTURE],
         )
     )
     assert pending["decision"] is None
@@ -650,7 +651,9 @@ def test_personal_kb_handler_requires_a_recorded_approval() -> None:
         pending["proposal_id"], ProposalDecisionIn(decision="approve", note="Reviewed")
     )
     assert decided["decision"] == "approve"
-    assert any(item["preference_key"] == "example_sequence" for item in list_personal_kb_entries())
+    entries = list_personal_kb_entries()
+    entry = next(item for item in entries if item["preference_key"] == "example_sequence")
+    assert entry["agent_types"] == [AgentName.LECTURE.value]
 
 
 def test_feedback_handler_records_explicit_feedback_only() -> None:

@@ -91,6 +91,10 @@ real tool use and optional LLM synthesis:
   Approval chooses a bounded retention period (30 days by default; 1–365 days),
   after which an entry expires into a minimal audit tombstone. An owner can also
   delete a searchable entry; neither expiry nor deletion retains its content.
+- **Approved Personal KB preferences** can be scoped to selected specialist
+  agents. Matching entries are snapshotted into the proposed task before human
+  approval, then appended only to the matching local review draft; they never
+  become verified facts or override evidence, privacy, safety, or approval gates.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.
