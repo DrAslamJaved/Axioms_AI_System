@@ -103,6 +103,9 @@ real tool use and optional LLM synthesis:
   PDF, DOCX, and UTF-8 text files into local storage with size and extraction
   limits. An approver can attach immutable document metadata to a task before
   execution approval, but no text is injected into an agent or sent externally.
+- **Structured local audit events** include a safe request correlation ID and
+  allowlisted lifecycle metadata only. Request bodies, task goals, draft text,
+  and document text are deliberately excluded from the log payload.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.
@@ -294,6 +297,11 @@ Use authenticated `GET /tasks?status=awaiting_review&limit=50` for a read-only w
 Use `GET /health` to verify authentication posture and provider status.
 Use `GET /system/readiness` for a full component report.
 Use authenticated `GET /operations/summary` for aggregate local task and worker-lease health; it is read-only and never runs or changes work.
+
+Every API response includes an `X-Request-ID` header. Provide a safe
+8–128-character `X-Request-ID` value to correlate your local audit events, or
+allow Axioms to generate one. The local JSON audit event records only request
+metadata and approved lifecycle fields, never request bodies or generated text.
 
 ## Local backup and restore verification
 

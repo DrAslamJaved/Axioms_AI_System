@@ -3,6 +3,8 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import BackgroundTasks, UploadFile
+from starlette.requests import Request
+from starlette.responses import Response
 
 from axioms import api
 from axioms import core as core_module
@@ -32,6 +34,7 @@ from axioms.api import (
     audit_episodic_memory,
     cancel_task,
     compare_task_revision,
+    correlate_and_audit_request,
     create_agentic_assessment_blueprint,
     create_agentic_content_review,
     create_agentic_portfolio_review,
@@ -103,6 +106,29 @@ def test_lecture_plan_handler_returns_duration_accurate_plan() -> None:
     body = create_lecture_plan(lecture_payload())
     assert sum(section["minutes"] for section in body["sections"]) == 75
     assert body["request"]["topic"] == "Spectral Graph Theory"
+
+
+def test_correlation_middleware_echoes_a_safe_request_id() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/health",
+            "raw_path": b"/health",
+            "query_string": b"",
+            "headers": [(b"x-request-id", b"study-run_2026")],
+            "client": ("testclient", 50000),
+            "server": ("testserver", 80),
+        }
+    )
+
+    async def call_next(_: Request) -> Response:
+        return Response(status_code=204)
+
+    response = asyncio.run(correlate_and_audit_request(request, call_next))
+    assert response.headers["X-Request-ID"] == "study-run_2026"
 
 
 def test_document_ingestion_handler_returns_metadata_without_exposing_text(tmp_path: Path, monkeypatch) -> None:
