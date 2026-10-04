@@ -139,7 +139,7 @@ def run_agentic_portfolio_review(
 ) -> AgenticPortfolioResult:
     """Build an evidence-bound plan, then optionally generate an internal readiness review."""
     settings = config or AgenticPortfolioConfig()
-    package = build_portfolio_package(request)
+    package = build_portfolio_package(request, provider=provider)
     trace = [
         PortfolioAgentStep(
             PortfolioStepKind.PLAN,
