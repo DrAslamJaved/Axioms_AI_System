@@ -251,6 +251,31 @@ class AxiomsCore:
         """Expose revision-family metadata for human audit; this cannot change tasks."""
         return self.store.lineage(task_id)
 
+    def task_trace(self, task_id: str) -> dict:
+        """Project a content-free lifecycle trace for an authorized human reviewer.
+
+        Persisted trace summaries can mention local filenames or reviewer-provided
+        notes, so this projection deliberately exposes only event kind, agent,
+        and timestamp. It cannot execute, approve, alter, or release a task.
+        """
+        task = self.store.get(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        return {
+            "task_id": task["task_id"],
+            "created_at": task["created_at"],
+            "status": task["status"],
+            "risk_tier": task.get("risk_tier"),
+            "events": [
+                {
+                    "kind": event["kind"],
+                    "agent": event.get("agent"),
+                    "created_at": event["created_at"],
+                }
+                for event in task.get("agent_trace", [])
+            ],
+        }
+
     def compare_revision(self, task_id: str) -> dict:
         """Show a reviewer the direct parent-to-revision changes without acting on either task."""
         revision = self.store.get(task_id)
