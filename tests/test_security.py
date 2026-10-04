@@ -12,6 +12,7 @@ from axioms.security import (
     auth_mode,
     configured_api_key,
     require_api_key,
+    require_external_provider_consent,
     require_role,
     resolve_principal,
     resolve_role,
@@ -38,6 +39,20 @@ def test_missing_key_is_rejected_when_auth_enabled(monkeypatch) -> None:
     with pytest.raises(HTTPException) as excinfo:
         require_api_key(None)
     assert excinfo.value.status_code == 401
+
+
+def test_external_provider_consent_is_required_only_for_configured_external_llms(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "disabled")
+    assert require_external_provider_consent(None) is None
+
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "anthropic")
+    with pytest.raises(HTTPException) as excinfo:
+        require_external_provider_consent(None)
+    assert excinfo.value.status_code == 428
+    assert require_external_provider_consent("true") is None
+
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "openai")
+    assert require_external_provider_consent("yes") is None
 
 
 def test_wrong_key_is_rejected(monkeypatch) -> None:
@@ -404,6 +419,39 @@ def test_optional_llm_generation_routes_require_an_approver(monkeypatch) -> None
             dependency("view")
         assert excinfo.value.status_code == 403
         assert dependency("approve") is None
+
+
+def test_optional_llm_generation_routes_require_per_request_external_consent(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "anthropic")
+    paths = [
+        "/lecture-plans",
+        "/lecture-plans/docx",
+        "/writing-drafts",
+        "/writing-drafts/docx",
+        "/research-briefs/agentic",
+        "/assessment-blueprints",
+        "/assessment-blueprints/agentic",
+        "/assessment-blueprints/student-docx",
+        "/assessment-blueprints/instructor-docx",
+        "/content-packages",
+        "/content-packages/agentic",
+        "/content-packages/docx",
+        "/social-media-packages",
+        "/social-media-packages/agentic",
+        "/social-media-packages/docx",
+        "/portfolio-packages",
+        "/portfolio-packages/agentic",
+        "/portfolio-packages/docx",
+        "/autoeval-reports",
+        "/autoeval-reports/docx",
+    ]
+    for path in paths:
+        route = next(route for route in app.routes if getattr(route, "path", None) == path)
+        consent_dependency = route.dependant.dependencies[1].call
+        with pytest.raises(HTTPException) as excinfo:
+            consent_dependency(None)
+        assert excinfo.value.status_code == 428
+        assert consent_dependency("true") is None
 
 
 def test_remaining_service_operation_routes_require_an_approver(monkeypatch) -> None:

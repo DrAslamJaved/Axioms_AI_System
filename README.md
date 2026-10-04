@@ -93,7 +93,10 @@ real tool use and optional LLM synthesis:
   failed responses retain their fixed, review-first templates. AutoEval keeps
   deterministic checks authoritative and limits provider use to an optional
   qualitative summary. In named-key deployments, every optional-LLM generation
-  route requires an `approver` or `admin` key.
+  route requires an `approver` or `admin` key. When Anthropic or OpenAI is
+  configured, each such request must also set
+  `X-Axioms-Allow-External-Provider: true`; otherwise the request is rejected
+  before submitted material can be sent to the provider.
 - **Provider-reported token metadata** preserves input and output token counts
   on each LLM completion when a configured provider supplies them. Counts are
   not cost estimates, are zero for offline or unavailable usage data, and are
@@ -214,6 +217,11 @@ research generation, external discovery, or LLM-capable generation. `approver`
 keys may make those reviewed decisions, and only `admin` keys can acknowledge a
 HIGH-risk data-governance override. Existing single-key and legacy named-key
 deployments retain their prior administrator-equivalent behaviour.
+
+When `AXIOMS_LLM_PROVIDER` is `anthropic` or `openai`, an authorized generation
+request must explicitly include `X-Axioms-Allow-External-Provider: true`. This
+per-request confirmation is not needed for the default disabled provider or its
+local deterministic fallbacks.
 
 To enable LLM-powered synthesis in the agentic research agent, install the
 optional dependencies: `pip install -e ".[agentic]"`.

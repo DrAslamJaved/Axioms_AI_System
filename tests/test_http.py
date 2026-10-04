@@ -297,6 +297,10 @@ def test_agentic_endpoint_returns_503_on_llm_misconfiguration(monkeypatch) -> No
             }
         ],
     }
-    response = client.post("/research-briefs/agentic", json=payload)
+    response = client.post(
+        "/research-briefs/agentic",
+        json=payload,
+        headers={"X-Axioms-Allow-External-Provider": "true"},
+    )
     assert response.status_code == 503
     assert "misconfigured" in response.json()["detail"]
