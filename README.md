@@ -85,6 +85,10 @@ real tool use and optional LLM synthesis:
   failed responses retain their fixed, review-first templates. AutoEval keeps
   deterministic checks authoritative and limits provider use to an optional
   qualitative summary.
+- **Provider-reported token metadata** preserves input and output token counts
+  on each LLM completion when a configured provider supplies them. Counts are
+  not cost estimates, are zero for offline or unavailable usage data, and are
+  not sent to any telemetry service.
 - **SQLite** stores task episodes, a consented episodic-memory ledger, and an
   approved Personal Knowledge Base (PKB). Episodic memory retains only
   owner-approved, non-sensitive task summaries — never draft content by default.
