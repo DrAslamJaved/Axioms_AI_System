@@ -442,7 +442,7 @@ with st.expander("Task work queue", expanded=False):
 # --- Personal Knowledge Base governance ---
 
 with st.expander("Personal Knowledge Base governance", expanded=False):
-    st.caption("Feedback is recorded separately. Preferences become active only after explicit approval.")
+    st.caption("Only an approver or administrator can record durable feedback or create a proposal. Preferences become active only after explicit approval.")
     with st.form("personal-kb-proposal"):
         kb_category = st.selectbox(
             "Preference category",
