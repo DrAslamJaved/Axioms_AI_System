@@ -363,3 +363,44 @@ def test_durable_knowledge_write_routes_require_an_approver(monkeypatch) -> None
             dependency("view")
         assert excinfo.value.status_code == 403
         assert dependency("approve") is None
+
+
+def test_optional_llm_generation_routes_require_an_approver(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Reviewer": {"secret": "approve", "role": "approver"},
+                "Observer": {"secret": "view", "role": "viewer"},
+            }
+        ),
+    )
+    paths = [
+        "/lecture-plans",
+        "/lecture-plans/docx",
+        "/writing-drafts",
+        "/writing-drafts/docx",
+        "/research-briefs/agentic",
+        "/assessment-blueprints",
+        "/assessment-blueprints/agentic",
+        "/assessment-blueprints/student-docx",
+        "/assessment-blueprints/instructor-docx",
+        "/content-packages",
+        "/content-packages/agentic",
+        "/content-packages/docx",
+        "/social-media-packages",
+        "/social-media-packages/agentic",
+        "/social-media-packages/docx",
+        "/portfolio-packages",
+        "/portfolio-packages/agentic",
+        "/portfolio-packages/docx",
+        "/autoeval-reports",
+        "/autoeval-reports/docx",
+    ]
+    for path in paths:
+        route = next(route for route in app.routes if getattr(route, "path", None) == path)
+        dependency = route.dependant.dependencies[0].call
+        with pytest.raises(HTTPException) as excinfo:
+            dependency("view")
+        assert excinfo.value.status_code == 403
+        assert dependency("approve") is None
