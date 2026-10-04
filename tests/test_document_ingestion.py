@@ -61,3 +61,13 @@ def test_store_requires_explicit_non_sensitive_confirmation_and_returns_metadata
     assert store.get_text_for_internal_use(stored.document_id) == "Internal research notes"
     assert store.get_metadata("doc_missing") is None
     assert store.get_text_for_internal_use("doc_missing") is None
+
+
+def test_store_deletion_permanently_removes_metadata_and_extracted_text(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path / "documents.sqlite3")
+    stored = store.ingest(b"Withdrawn local reference", "withdrawn.txt", confirmed_non_sensitive=True)
+
+    assert store.delete(stored.document_id)
+    assert store.get_metadata(stored.document_id) is None
+    assert store.get_text_for_internal_use(stored.document_id) is None
+    assert not store.delete(stored.document_id)
