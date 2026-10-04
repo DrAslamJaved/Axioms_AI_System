@@ -95,6 +95,43 @@ with st.expander("Task status inspector", expanded=False):
         else:
             st.caption("No final-review action is available from this inspector.")
 
+# --- Manual provider usage summary ---
+
+with st.expander("Local provider usage summary", expanded=False):
+    st.caption(
+        "Manual, aggregate-only lookup. Counts are provider-reported tokens, not cost or billing estimates."
+    )
+    if st.button("Refresh local usage summary"):
+        response = _get(f"{API_URL}/usage/summary")
+        if response.ok:
+            st.session_state["usage_summary"] = response.json()
+        else:
+            st.session_state.pop("usage_summary", None)
+            st.error(f"Error {response.status_code}: {response.text}")
+    usage_summary = st.session_state.get("usage_summary")
+    if usage_summary:
+        usage_columns = st.columns(3)
+        usage_columns[0].metric("Recorded completions", usage_summary["request_count"])
+        usage_columns[1].metric("Input tokens", usage_summary["input_tokens"])
+        usage_columns[2].metric("Output tokens", usage_summary["output_tokens"])
+        if usage_summary["by_provider"]:
+            st.dataframe(
+                [
+                    {
+                        "Provider": item["provider"],
+                        "Model": item["model"],
+                        "Completions": item["request_count"],
+                        "Input tokens": item["input_tokens"],
+                        "Output tokens": item["output_tokens"],
+                    }
+                    for item in usage_summary["by_provider"]
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+        else:
+            st.info("No provider-reported token metadata has been recorded locally.")
+
 # --- Personal Knowledge Base governance ---
 
 with st.expander("Personal Knowledge Base governance", expanded=False):

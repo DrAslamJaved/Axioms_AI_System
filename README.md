@@ -89,7 +89,8 @@ real tool use and optional LLM synthesis:
   on each LLM completion when a configured provider supplies them. Counts are
   not cost estimates, are zero for offline or unavailable usage data, and are
   not sent to any telemetry service. The authenticated read-only endpoint
-  `GET /usage/summary` reports aggregates by provider and model only.
+  `GET /usage/summary` reports aggregates by provider and model only. The local
+  Streamlit console presents this data only after an explicit manual refresh.
 - **SQLite** stores task episodes, a consented episodic-memory ledger, and an
   approved Personal Knowledge Base (PKB). Episodic memory retains only
   owner-approved, non-sensitive task summaries — never draft content by default.
