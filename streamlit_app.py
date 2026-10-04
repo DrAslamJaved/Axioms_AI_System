@@ -65,6 +65,36 @@ with st.expander("System integration readiness", expanded=False):
     except Exception as error:  # noqa: BLE001
         st.error(f"Could not load readiness report: {error}")
 
+# --- Manual task status inspector ---
+
+with st.expander("Task status inspector", expanded=False):
+    st.caption(
+        "Manual, metadata-only lookup. It does not start work, refresh automatically, or show task content."
+    )
+    with st.form("task-status-inspector"):
+        status_task_id = st.text_input("Task ID", placeholder="task_…")
+        status_submitted = st.form_submit_button("Refresh task status")
+    if status_submitted:
+        if not status_task_id.strip():
+            st.warning("Enter a task ID to inspect its status.")
+        else:
+            response = _get(f"{API_URL}/tasks/{status_task_id.strip()}/status")
+            if response.ok:
+                st.session_state["task_status"] = response.json()
+            else:
+                st.session_state.pop("task_status", None)
+                st.error(f"Error {response.status_code}: {response.text}")
+    task_status = st.session_state.get("task_status")
+    if task_status:
+        status_columns = st.columns(3)
+        status_columns[0].metric("Lifecycle", task_status["status"])
+        status_columns[1].metric("Risk tier", task_status["risk_tier"] or "unknown")
+        status_columns[2].metric("Drafts ready", task_status["deliverable_count"])
+        if task_status["final_review_required"]:
+            st.warning("Final human review is required before any release or external delivery.")
+        else:
+            st.caption("No final-review action is available from this inspector.")
+
 # --- Personal Knowledge Base governance ---
 
 with st.expander("Personal Knowledge Base governance", expanded=False):

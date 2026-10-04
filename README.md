@@ -113,7 +113,9 @@ real tool use and optional LLM synthesis:
 - **Structured local audit events** include a safe request correlation ID and
   allowlisted lifecycle metadata only. Request bodies, task goals, draft text,
   and document text are deliberately excluded from the log payload.
-- **FastAPI** exposes the service; **Streamlit** provides a review console.
+- **FastAPI** exposes the service; **Streamlit** provides a review console,
+  including an explicit manual task-status inspector. The inspector performs no
+  automatic polling, task execution, or content display.
 
 Every external or public-facing deliverable is held for explicit human approval.
 HIGH-risk tasks (sensitive educational data) are **blocking** — they require the
