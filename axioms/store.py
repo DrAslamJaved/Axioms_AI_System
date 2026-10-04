@@ -176,7 +176,7 @@ def _task_queue_item(payload: dict) -> dict:
 
 
 def _lineage_item(payload: dict) -> dict:
-    """Project only review-queue metadata, never deliverables or reviewer notes."""
+    """Project only revision metadata, never task content or reviewer notes."""
     return {
         "task_id": payload["task_id"],
         "revision_of": payload.get("revision_of"),
@@ -184,6 +184,5 @@ def _lineage_item(payload: dict) -> dict:
         "created_at": payload["created_at"],
         "status": payload["status"],
         "risk_tier": payload.get("risk_tier"),
-        "goal": payload["request"]["goal"],
         "reviewed_by": payload.get("reviewed_by"),
     }
