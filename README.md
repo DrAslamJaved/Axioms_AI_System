@@ -79,10 +79,10 @@ real tool use and optional LLM synthesis:
   identity is derived from the authenticated key rather than self-asserted.
 - **LLM provider seam** supporting Anthropic, OpenAI, or disabled (the safe
   default). Lecture Design, Writing & Communication, instructor-facing
-  Assessment Design, and internal Content Creation planning can use bounded
-  synthesis when a provider is configured; malformed, disabled, or failed
-  responses retain their fixed, review-first templates. Other specialist agents
-  remain deterministic.
+  Assessment Design, internal Content Creation planning, and internal Social
+  Media asset planning can use bounded synthesis when a provider is configured;
+  malformed, disabled, or failed responses retain their fixed, review-first
+  templates. Other specialist agents remain deterministic.
 - **SQLite** stores task episodes, a consented episodic-memory ledger, and an
   approved Personal Knowledge Base (PKB). Episodic memory retains only
   owner-approved, non-sensitive task summaries — never draft content by default.
