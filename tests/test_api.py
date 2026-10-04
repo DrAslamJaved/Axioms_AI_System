@@ -80,6 +80,7 @@ from axioms.api import (
     search_episodic_memory,
     similarity_screen,
     system_readiness,
+    usage_summary,
 )
 from axioms.core import AxiomsCore
 from axioms.document_ingestion import DocumentStore
@@ -107,6 +108,28 @@ def test_lecture_plan_handler_returns_duration_accurate_plan() -> None:
     body = create_lecture_plan(lecture_payload())
     assert sum(section["minutes"] for section in body["sections"]) == 75
     assert body["request"]["topic"] == "Spectral Graph Theory"
+
+
+def test_usage_summary_handler_returns_only_aggregate_token_metadata(tmp_path: Path, monkeypatch) -> None:
+    from axioms.usage import UsageStore
+
+    monkeypatch.setenv("AXIOMS_DATABASE_URL", f"sqlite:///{tmp_path / 'usage.sqlite3'}")
+    UsageStore().record(provider="anthropic", model="test-model", input_tokens=8, output_tokens=4)
+
+    assert usage_summary() == {
+        "request_count": 1,
+        "input_tokens": 8,
+        "output_tokens": 4,
+        "by_provider": [
+            {
+                "provider": "anthropic",
+                "model": "test-model",
+                "request_count": 1,
+                "input_tokens": 8,
+                "output_tokens": 4,
+            }
+        ],
+    }
 
 
 def test_correlation_middleware_echoes_a_safe_request_id() -> None:
