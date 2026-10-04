@@ -139,7 +139,7 @@ def run_agentic_social_media_review(
 ) -> AgenticSocialMediaResult:
     """Build deterministic drafts, then optionally generate a bounded internal review."""
     settings = config or AgenticSocialMediaConfig()
-    package = build_social_media_package(request)
+    package = build_social_media_package(request, provider=provider)
     trace = [
         SocialMediaAgentStep(
             SocialMediaStepKind.PLAN,

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from docx import Document
 
+from axioms.llm import DisabledProvider, FakeProvider, LLMMessage
 from axioms.social_media_agent import (
     RecentSocialPost,
     SocialMediaRequest,
@@ -36,6 +37,64 @@ def test_social_package_is_platform_native_and_blocked_from_external_action() ->
     assert package.approval_required
     assert package.external_action_blocked
     assert all("not scheduled" in item.status for item in package.proposed_calendar)
+
+
+
+def test_disabled_llm_retains_the_deterministic_social_package() -> None:
+    baseline = build_social_media_package(request())
+    package = build_social_media_package(request(), provider=DisabledProvider())
+    assert package == baseline
+
+
+def test_fake_llm_enriches_internal_asset_briefs_without_changing_public_drafts() -> None:
+    captured: dict[str, list[LLMMessage]] = {}
+
+    def responder(messages: list[LLMMessage]) -> str:
+        captured["messages"] = messages
+        return "---".join(
+            f"Internal visual-planning guidance for platform {number}; verify permissions and accessibility before approval."
+            for number in range(1, 4)
+        )
+
+    baseline = build_social_media_package(request(), provider=DisabledProvider())
+    package = build_social_media_package(request(), provider=FakeProvider(responder))
+
+    assert [draft.platform for draft in package.platform_drafts] == [
+        draft.platform for draft in baseline.platform_drafts
+    ]
+    assert [draft.format for draft in package.platform_drafts] == [
+        draft.format for draft in baseline.platform_drafts
+    ]
+    assert [draft.headline for draft in package.platform_drafts] == [
+        draft.headline for draft in baseline.platform_drafts
+    ]
+    assert [draft.draft_copy for draft in package.platform_drafts] == [
+        draft.draft_copy for draft in baseline.platform_drafts
+    ]
+    assert package.proposed_calendar == baseline.proposed_calendar
+    assert package.publication_checks == baseline.publication_checks
+    assert package.external_action_blocked
+    assert package.topic_cooldown_hours == 48
+    assert package.platform_drafts[0].asset_brief.startswith("Internal visual-planning guidance")
+    prompt = " ".join(message.content for message in captured["messages"])
+    assert "Instructor-approved spectral graph theory lecture notes" in prompt
+    assert "write or revise post copy" in prompt
+    assert "48-hour cooldown" in prompt
+
+
+def test_malformed_or_failed_llm_output_retains_the_deterministic_social_package() -> None:
+    baseline = build_social_media_package(request(), provider=DisabledProvider())
+    malformed = build_social_media_package(request(), provider=FakeProvider(lambda _messages: "one brief only"))
+
+    class BrokenProvider:
+        name = "broken"
+
+        def complete(self, messages, *, max_tokens: int = 1024, temperature: float = 0.2):
+            raise RuntimeError("provider unavailable")
+
+    failed = build_social_media_package(request(), provider=BrokenProvider())
+    assert malformed == baseline
+    assert failed == baseline
 
 
 def test_same_topic_within_48_hours_is_rejected() -> None:
