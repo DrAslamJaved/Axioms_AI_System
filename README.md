@@ -154,7 +154,7 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `AXIOMS_API_KEY` | Single shared API secret (legacy mode) | unset (open-dev) |
-| `AXIOMS_API_KEYS` | JSON object mapping principal names to secrets, e.g. `{"Dr Aslam": "key1"}` | unset |
+| `AXIOMS_API_KEYS` | Named API keys. Legacy `{"Dr Aslam": "key1"}` entries remain administrator-equivalent; prefer `{"Dr Aslam":{"secret":"key1","role":"admin"}}` | unset |
 | `AXIOMS_APPROVAL_MODE` | `strict` (all drafts gated) or `risk_based` (low-risk planned directly) | `strict` |
 | `AXIOMS_MAX_PARALLEL_WORKERS` | Local cap for explicit `parallel=true` drafting (1–4) | `2` |
 | `AXIOMS_LLM_PROVIDER` | `disabled`, `anthropic`, or `openai` | `disabled` |
@@ -163,6 +163,12 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | `OPENAI_API_KEY` | Required when provider is `openai` | — |
 | `CROSSREF_MAILTO` | Polite Crossref identification (recommended) | unset |
 | `TAVILY_API_KEY` | Enables read-only research discovery | unset (disabled) |
+
+In named-key mode, `viewer` keys can inspect protected records but cannot make
+approval, revision, recovery, or memory-governance decisions. `approver` keys
+may make those reviewed decisions, and only `admin` keys can acknowledge a
+HIGH-risk data-governance override. Existing single-key and legacy named-key
+deployments retain their prior administrator-equivalent behaviour.
 
 To enable LLM-powered synthesis in the agentic research agent, install the
 optional dependencies: `pip install -e ".[agentic]"`.
