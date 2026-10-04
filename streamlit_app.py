@@ -78,6 +78,51 @@ with st.expander("System integration readiness", expanded=False):
 
 # --- Manual task status inspector ---
 
+with st.expander("Local operations snapshot", expanded=False):
+    st.caption(
+        "Manual, aggregate-only local health view. It does not poll, list individual jobs, execute work, "
+        "or perform external actions."
+    )
+    if st.button("Refresh local operations snapshot"):
+        response = _get(f"{API_URL}/operations/summary")
+        if response.ok:
+            st.session_state["operations_snapshot"] = response.json()
+        else:
+            st.session_state.pop("operations_snapshot", None)
+            st.error(f"Error {response.status_code}: {response.text}")
+    operations_snapshot = st.session_state.get("operations_snapshot")
+    if operations_snapshot:
+        task_counts = operations_snapshot["tasks"]
+        dispatch = operations_snapshot["dispatch"]
+        dispatch_counts = dispatch["status_counts"]
+        summary_columns = st.columns(3)
+        summary_columns[0].metric("Tracked tasks", sum(task_counts.values()))
+        summary_columns[1].metric("Local dispatch jobs", sum(dispatch_counts.values()))
+        summary_columns[2].metric("Active leases", dispatch["active_lease_count"])
+        task_counts_column, dispatch_counts_column = st.columns(2)
+        with task_counts_column:
+            st.caption("Task lifecycle counts")
+            st.dataframe(
+                [{"Lifecycle": status, "Tasks": count} for status, count in task_counts.items()],
+                hide_index=True,
+                use_container_width=True,
+            )
+        with dispatch_counts_column:
+            st.caption("Local dispatch counts")
+            st.dataframe(
+                [{"Lifecycle": status, "Jobs": count} for status, count in dispatch_counts.items()],
+                hide_index=True,
+                use_container_width=True,
+            )
+        st.caption(f"Observed locally at {dispatch['observed_at']}.")
+        if dispatch["expired_lease_count"] or dispatch["missing_lease_count"]:
+            st.warning(
+                "A local worker lease needs human review. This snapshot does not reclaim work or modify dispatch state."
+            )
+        st.caption("External actions remain disabled; final human review remains required.")
+
+# --- Manual task status inspector ---
+
 with st.expander("Task status inspector", expanded=False):
     st.caption(
         "Manual, metadata-only lookup. It does not start work, refresh automatically, or show task content."
