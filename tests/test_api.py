@@ -739,6 +739,8 @@ def test_task_list_handler_filters_a_read_only_human_work_queue(tmp_path: Path, 
 
     assert len(page["items"]) == 1
     assert page["items"][0]["status"] == TaskStatus.PENDING_APPROVAL.value
+    assert "request" not in page["items"][0]
+    assert "deliverables" not in page["items"][0]
     assert page["next_cursor"] is None
 
 
