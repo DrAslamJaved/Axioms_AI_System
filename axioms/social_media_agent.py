@@ -8,6 +8,8 @@ from pathlib import Path
 
 from docx import Document
 
+from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider, get_provider
+
 
 class SocialPlatform(StrEnum):
     LINKEDIN = "linkedin"
@@ -222,10 +224,13 @@ def _draft_for_platform(request: SocialMediaRequest, platform: SocialPlatform) -
     )
 
 
-def build_social_media_package(request: SocialMediaRequest) -> SocialMediaPackage:
-    """Build reviewable platform drafts without contacting, scheduling, or posting to any service."""
+def build_social_media_package(
+    request: SocialMediaRequest, *, provider: LLMProvider | None = None
+) -> SocialMediaPackage:
+    """Build reviewable drafts with bounded internal asset-planning synthesis only."""
     request.validate()
     drafts = tuple(_draft_for_platform(request, platform) for platform in request.platforms)
+    drafts = _synthesise_asset_briefs(request, drafts, provider or get_provider())
     calendar = tuple(
         CalendarEntry(
             week=(index % request.calendar_weeks) + 1,
@@ -249,6 +254,90 @@ def build_social_media_package(request: SocialMediaRequest) -> SocialMediaPackag
         proposed_calendar=calendar,
         publication_checks=checks,
     )
+
+
+
+_SOCIAL_MEDIA_SYSTEM_PROMPT = """You are the Axioms internal social-media asset-planning assistant.
+Improve only the supplied internal asset brief for each platform draft. Do not
+write or revise post copy, captions, headlines, calls to action, publication
+times, campaign plans, messages, or final public material. Preserve each
+platform, platform-native format, verified facts, approved source scope,
+audience, objective, brand voice, accessibility note, 48-hour cooldown, and
+human approval boundary. Do not invent claims, credentials, metrics, citations,
+endorsements, permissions, sources, or platform outcomes. Never schedule,
+upload, publish, share, message, or authorize an external action.
+
+Return exactly one concise internal asset-planning paragraph per supplied
+platform, in its original order, separated by a line containing only `---`.
+Do not use headings, lists, citations, links, or questions.
+"""
+
+
+def _synthesise_asset_briefs(
+    request: SocialMediaRequest,
+    drafts: tuple[PlatformDraft, ...],
+    provider: LLMProvider,
+) -> tuple[PlatformDraft, ...]:
+    """Apply only well-formed internal asset guidance; all public-facing draft fields stay fixed."""
+    facts = "\n".join(f"- {fact}" for fact in request.verified_facts)
+    draft_specification = "\n".join(
+        (
+            f"{index}. Platform: {draft.platform.value}; format: {draft.format}; "
+            f"current asset brief: {draft.asset_brief}; accessibility note: {draft.accessibility_note}"
+        )
+        for index, draft in enumerate(drafts, start=1)
+    )
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Audience: {request.audience}\n"
+        f"Objective: {request.objective.value}\n"
+        f"Brand voice: {request.brand_voice}\n"
+        f"Approved source scope: {request.approved_source_scope}\n"
+        f"Verified facts:\n{facts}\n\n"
+        f"Platform drafts:\n{draft_specification}\n"
+    )
+    try:
+        result = provider.complete(
+            [LLMMessage("system", _SOCIAL_MEDIA_SYSTEM_PROMPT), LLMMessage("user", user_prompt)],
+            max_tokens=1_000,
+            temperature=0.2,
+        )
+    except LLMDisabledError:
+        return drafts
+    except Exception:  # noqa: BLE001 - failed synthesis must retain the review-first package
+        return drafts
+    generated = _parse_asset_briefs(result.text, len(drafts))
+    if generated is None:
+        return drafts
+    return tuple(
+        PlatformDraft(
+            platform=draft.platform,
+            format=draft.format,
+            headline=draft.headline,
+            draft_copy=draft.draft_copy,
+            asset_brief=asset_brief,
+            accessibility_note=draft.accessibility_note,
+        )
+        for draft, asset_brief in zip(drafts, generated, strict=True)
+    )
+
+
+def _parse_asset_briefs(text: str, expected_drafts: int) -> tuple[str, ...] | None:
+    """Reject malformed or externally actionable output before it alters internal asset guidance."""
+    blocks = [block.strip() for block in text.split("---") if block.strip()]
+    if len(blocks) != expected_drafts:
+        return None
+    if any(
+        "\n" in block
+        or "?" in block
+        or "http://" in block.casefold()
+        or "https://" in block.casefold()
+        or block.startswith(("-", "*", "#"))
+        or len(block) > 1_500
+        for block in blocks
+    ):
+        return None
+    return tuple(blocks)
 
 
 def export_docx(package: SocialMediaPackage, destination: Path) -> Path:
