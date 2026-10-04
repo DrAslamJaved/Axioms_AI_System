@@ -92,7 +92,7 @@ class TaskStore:
             ).fetchall()
         page = rows[:limit]
         return {
-            "items": [json.loads(row[1]) for row in page],
+            "items": [_task_queue_item(json.loads(row[1])) for row in page],
             "next_cursor": page[-1][0] if len(rows) > limit and page else None,
         }
 
@@ -158,6 +158,21 @@ class TaskStore:
 
 def _lineage_sort_key(payload: dict) -> tuple[str, str]:
     return (payload.get("created_at", ""), payload["task_id"])
+
+
+def _task_queue_item(payload: dict) -> dict:
+    """Project work-queue state without drafts, requests, preferences, or review notes."""
+    return {
+        "task_id": payload["task_id"],
+        "created_at": payload["created_at"],
+        "status": payload["status"],
+        "risk_tier": payload.get("risk_tier"),
+        "graph_version": payload.get("graph_version"),
+        "revision_of": payload.get("revision_of"),
+        "deliverable_count": len(payload.get("deliverables", [])),
+        "reference_document_count": len(payload.get("reference_documents", [])),
+        "preference_context_agents": sorted(payload.get("preference_context", {})),
+    }
 
 
 def _lineage_item(payload: dict) -> dict:
