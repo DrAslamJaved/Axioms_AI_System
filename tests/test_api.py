@@ -62,6 +62,7 @@ from axioms.api import (
     create_writing_draft_docx,
     decide_episodic_memory,
     decide_preference_proposal,
+    delete_document,
     delete_episodic_memory,
     discover_arxiv_preprints,
     discover_research_sources,
@@ -138,6 +139,31 @@ def test_document_ingestion_handler_returns_metadata_without_exposing_text(tmp_p
     assert payload["filename"] == "reference.txt"
     assert payload["char_count"] == len("Approved research context")
     assert "content" not in payload
+
+
+def test_document_deletion_handler_removes_local_text_without_touching_task_history(
+    tmp_path: Path, monkeypatch
+) -> None:
+    local_documents = DocumentStore(tmp_path / "documents.sqlite3")
+    local_core = AxiomsCore(TaskStore(tmp_path / "tasks.sqlite3"))
+    monkeypatch.setattr(api, "document_store", local_documents)
+    monkeypatch.setattr(api, "core", local_core)
+    document = local_documents.ingest(
+        b"Withdrawn research context", "reference.txt", confirmed_non_sensitive=True
+    )
+    task = local_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+    attach_reference_document(
+        task.task_id,
+        ReferenceDocumentAttachmentIn(document_id=document.document_id, attached_by="Dr Aslam"),
+        principal="Dr Aslam",
+    )
+
+    deleted = delete_document(document.document_id, principal="Dr Aslam")
+    assert deleted == {"document_id": document.document_id, "status": "deleted"}
+    assert local_documents.get_metadata(document.document_id) is None
+    assert local_documents.get_text_for_internal_use(document.document_id) is None
+    persisted = local_core.store.get(task.task_id)
+    assert persisted["reference_documents"][0]["document_id"] == document.document_id
 
 
 def test_reference_document_attachment_handler_records_only_metadata(tmp_path: Path, monkeypatch) -> None:
