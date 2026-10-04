@@ -8,6 +8,8 @@ from pathlib import Path
 
 from docx import Document
 
+from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider, get_provider
+
 
 class AssessmentType(StrEnum):
     QUIZ = "quiz"
@@ -150,8 +152,10 @@ def _rubric() -> tuple[RubricCriterion, ...]:
     )
 
 
-def build_assessment_blueprint(request: AssessmentRequest) -> AssessmentBlueprint:
-    """Build a source-bounded instructor blueprint, not an autonomous student assessment."""
+def build_assessment_blueprint(
+    request: AssessmentRequest, *, provider: LLMProvider | None = None
+) -> AssessmentBlueprint:
+    """Build a source-bounded instructor blueprint, enriching internal planning only when configured."""
     request.validate()
     marks = _allocate_marks(request.total_marks, request.question_count)
     questions: list[QuestionBlueprint] = []
@@ -176,6 +180,7 @@ def build_assessment_blueprint(request: AssessmentRequest) -> AssessmentBlueprin
                 rubric=_rubric(),
             )
         )
+    questions = list(_synthesise_prompt_frameworks(request, tuple(questions), provider or get_provider()))
     ai_review = [
         "Require reasoning and intermediate work; do not assess a final answer alone.",
         "Use a course-specific, instructor-approved scenario rather than a directly searchable wording.",
@@ -198,6 +203,82 @@ def build_assessment_blueprint(request: AssessmentRequest) -> AssessmentBlueprin
         ai_resilience_review=tuple(ai_review),
         quality_checks=quality_checks,
     )
+
+
+_ASSESSMENT_SYSTEM_PROMPT = """You are the Axioms instructor-facing assessment-design assistant.
+Improve only the internal planning framework for each supplied blueprint item.
+Do not write student-facing question text, answers, solution steps, worked
+examples, marking decisions, or feedback. Preserve the approved source scope,
+learning-outcome mapping, marks, difficulty, and human instructor review.
+
+Return exactly one concise internal planning paragraph per supplied item, in its
+original order, separated by a line containing only `---`. Do not use headings,
+lists, citations, or question marks.
+"""
+
+
+def _synthesise_prompt_frameworks(
+    request: AssessmentRequest,
+    questions: tuple[QuestionBlueprint, ...],
+    provider: LLMProvider,
+) -> tuple[QuestionBlueprint, ...]:
+    """Use bounded instructor planning wording; malformed or failed synthesis changes nothing."""
+    items = "\n".join(
+        (
+            f"{question.number}. Outcome {question.outcome_id} ({question.bloom_level.value}); "
+            f"difficulty {question.difficulty.value}; {question.marks} marks; "
+            f"required evidence: {' | '.join(question.required_evidence)}"
+        )
+        for question in questions
+    )
+    outcomes = "\n".join(
+        f"- {outcome.outcome_id}: {outcome.text} ({outcome.bloom_level.value})"
+        for outcome in request.learning_outcomes
+    )
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Course level: {request.course_level}\n"
+        f"Assessment type: {request.assessment_type.value}\n"
+        f"Approved source scope: {request.approved_source_scope}\n"
+        f"Learning outcomes:\n{outcomes}\n\n"
+        f"Blueprint items:\n{items}\n"
+    )
+    try:
+        result = provider.complete(
+            [LLMMessage("system", _ASSESSMENT_SYSTEM_PROMPT), LLMMessage("user", user_prompt)],
+            max_tokens=1_000,
+            temperature=0.2,
+        )
+    except LLMDisabledError:
+        return questions
+    except Exception:  # noqa: BLE001 - provider failures must retain the instructor-reviewed fallback
+        return questions
+    generated = _parse_prompt_frameworks(result.text, len(questions))
+    if generated is None:
+        return questions
+    return tuple(
+        QuestionBlueprint(
+            number=question.number,
+            outcome_id=question.outcome_id,
+            bloom_level=question.bloom_level,
+            difficulty=question.difficulty,
+            marks=question.marks,
+            prompt_framework=prompt_framework,
+            required_evidence=question.required_evidence,
+            rubric=question.rubric,
+        )
+        for question, prompt_framework in zip(questions, generated, strict=True)
+    )
+
+
+def _parse_prompt_frameworks(text: str, expected_questions: int) -> tuple[str, ...] | None:
+    """Reject student-question-like or malformed output rather than weakening the blueprint contract."""
+    blocks = [block.strip() for block in text.split("---") if block.strip()]
+    if len(blocks) != expected_questions:
+        return None
+    if any("\n" in block or "?" in block or len(block) > 1_500 for block in blocks):
+        return None
+    return tuple(blocks)
 
 
 def export_student_docx(blueprint: AssessmentBlueprint, destination: Path) -> Path:
