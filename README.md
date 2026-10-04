@@ -103,6 +103,9 @@ real tool use and optional LLM synthesis:
   not sent to any telemetry service. The authenticated read-only endpoint
   `GET /usage/summary` reports aggregates by provider and model only. The local
   Streamlit console presents this data only after an explicit manual refresh.
+  Each stored usage event is linked only to the safe local request correlation
+  ID, so an administrator can relate completed provider-reported metadata to an
+  accepted consent event without retaining prompts, outputs, headers, or prices.
 - **SQLite** stores task episodes, a consented episodic-memory ledger, and an
   approved Personal Knowledge Base (PKB). Episodic memory retains only
   owner-approved, non-sensitive task summaries — never draft content by default.
