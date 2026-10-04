@@ -344,6 +344,7 @@ location suitable for the institution's data-retention policy.
 | AutoEval | `POST /autoeval-reports` | `POST /autoeval-reports/docx` |
 | Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
 | Task revision | `POST /tasks/{task_id}/revise` after final rejection | Creates a linked new task; fresh approval remains required |
+| Task work queue | `GET /tasks` | Authenticated metadata projection only; excludes goals, drafts, preferences, documents, and reviewer notes |
 | Task lineage | `GET /tasks/{task_id}/lineage` | Authenticated, metadata-only revision-family audit |
 | Revision comparison | `GET /tasks/{task_id}/revision-comparison` | Authenticated parent-to-revision diff; no state changes |
 
