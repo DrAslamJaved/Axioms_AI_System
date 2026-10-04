@@ -70,6 +70,7 @@ from axioms.api import (
     dispatch_approved_task,
     get_task_lineage,
     get_task_status,
+    get_task_trace,
     ingest_document,
     list_agents,
     list_personal_kb_entries,
@@ -762,6 +763,19 @@ def test_task_status_handler_returns_pollable_metadata_only(tmp_path: Path, monk
     }
     assert "request" not in status
     assert "agent_trace" not in status
+
+
+def test_task_trace_handler_returns_an_approver_review_projection(tmp_path: Path, monkeypatch) -> None:
+    test_core = AxiomsCore(TaskStore(tmp_path / "test.sqlite3"))
+    monkeypatch.setattr(api, "core", test_core)
+    record = test_core.create_task(TaskRequest(goal="Prepare a lecture on graph theory"))
+
+    trace = get_task_trace(record.task_id)
+
+    assert trace["task_id"] == record.task_id
+    assert trace["events"][0]["kind"] == "plan_created"
+    assert "request" not in trace
+    assert "summary" not in trace["events"][0]
 
 
 def test_personal_kb_handler_requires_a_recorded_approval() -> None:
