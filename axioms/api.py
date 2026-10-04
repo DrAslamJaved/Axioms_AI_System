@@ -64,7 +64,15 @@ from axioms.research_agent import (
 )
 from axioms.research_agent import export_docx as export_research_docx
 from axioms.research_agent_ai import run_agentic_research_brief
-from axioms.security import auth_mode, require_api_key, resolve_principal
+from axioms.security import (
+    AccessRole,
+    auth_mode,
+    ensure_role,
+    require_api_key,
+    require_role,
+    resolve_principal,
+    resolve_role,
+)
 from axioms.similarity import ComparisonText, SimilarityRequest, screen_similarity
 from axioms.social_media_agent import (
     RecentSocialPost,
@@ -93,6 +101,7 @@ _ARXIV_CLIENT = ArxivClient()
 _SEMANTIC_SCHOLAR_CLIENTS: dict[str, SemanticScholarClient] = {}
 
 DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+ROLE_DEPENDENCY = Depends(resolve_role)
 
 
 def _crossref_client() -> CrossrefClient:
@@ -518,7 +527,7 @@ def create_preference_proposal(payload: PreferenceProposalIn, _auth: None = Depe
 
 @app.post("/personal-kb/proposals/{proposal_id}/decision")
 def decide_preference_proposal(
-    proposal_id: str, payload: ProposalDecisionIn, _auth: None = Depends(require_api_key)
+    proposal_id: str, payload: ProposalDecisionIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> dict:
     try:
         return core.kb_store.decide(proposal_id, payload.decision, payload.note)
@@ -529,7 +538,7 @@ def decide_preference_proposal(
 
 
 @app.get("/personal-kb/entries")
-def list_personal_kb_entries() -> list[dict]:
+def list_personal_kb_entries(_auth: None = Depends(require_api_key)) -> list[dict]:
     return core.kb_store.entries()
 
 
@@ -549,7 +558,7 @@ def propose_episodic_memory(task_id: str, _auth: None = Depends(require_api_key)
 def decide_episodic_memory(
     proposal_id: str,
     payload: MemoryDecisionIn,
-    _auth: None = Depends(require_api_key),
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
     principal: str | None = Depends(resolve_principal),
 ) -> dict:
     try:
@@ -580,7 +589,7 @@ def search_episodic_memory(
 def delete_episodic_memory(
     memory_id: str,
     payload: MemoryDeleteIn,
-    _auth: None = Depends(require_api_key),
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
     principal: str | None = Depends(resolve_principal),
 ) -> dict:
     """Delete one searchable episodic-memory entry by its authenticated owner."""
@@ -922,7 +931,7 @@ def list_tasks(
 
 
 @app.get("/tasks/{task_id}")
-def get_task(task_id: str) -> dict:
+def get_task(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
     task = core.store.get(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -1057,7 +1066,7 @@ def create_cross_agent_autoeval(task_id: str, _auth: None = Depends(require_api_
 def create_task_revision(
     task_id: str,
     payload: RevisionIn,
-    _auth: None = Depends(require_api_key),
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
     principal: str | None = Depends(resolve_principal),
 ) -> dict:
     """Create a separate, approval-gated revision from a final reviewer rejection."""
@@ -1076,7 +1085,7 @@ def create_task_revision(
 def cancel_task(
     task_id: str,
     payload: CancellationIn,
-    _auth: None = Depends(require_api_key),
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
     principal: str | None = Depends(resolve_principal),
 ) -> dict:
     """Request safe cancellation before or at the next local graph-layer checkpoint."""
@@ -1093,7 +1102,7 @@ def cancel_task(
 def recover_task(
     task_id: str,
     payload: RecoveryIn,
-    _auth: None = Depends(require_api_key),
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
     principal: str | None = Depends(resolve_principal),
 ) -> dict:
     """Recover a human-confirmed interrupted local task; fresh approval is required to rerun it."""
@@ -1115,11 +1124,14 @@ def recover_task(
 def approval(
     task_id: str,
     payload: ApprovalIn,
-    _auth: None = Depends(require_api_key),
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
     principal: str | None = Depends(resolve_principal),
+    role: AccessRole | None = ROLE_DEPENDENCY,
 ) -> dict:
     # In named-key mode the principal is derived from the key and overrides the body.
     approver = principal or payload.approved_by
+    if payload.override_blocking:
+        ensure_role(role, AccessRole.ADMIN)
     try:
         return core.decide(
             task_id,
