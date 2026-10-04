@@ -84,19 +84,18 @@ def test_task_lineage_returns_a_stable_metadata_only_revision_family(tmp_path: P
         revision.task_id,
         second_revision.task_id,
     ]
-    assert lineage["items"][0]["reviewed_by"] == "Dr Aslam"
     assert set(lineage["items"][0]) == {
         "task_id",
         "revision_of",
-        "revision_requested_by",
         "created_at",
         "status",
         "risk_tier",
-        "reviewed_by",
     }
     assert "goal" not in lineage["items"][0]
     assert "approval_note" not in lineage["items"][0]
     assert "deliverables" not in lineage["items"][0]
+    assert "reviewed_by" not in lineage["items"][0]
+    assert "revision_requested_by" not in lineage["items"][0]
 
 
 def test_task_lineage_rejects_missing_ancestor(tmp_path: Path) -> None:
