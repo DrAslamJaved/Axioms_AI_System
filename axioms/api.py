@@ -817,8 +817,10 @@ def create_research_brief(payload: ResearchBriefIn, _auth: None = Depends(requir
 
 
 @app.post("/research/discover")
-def discover_research_sources(payload: ResearchDiscoveryIn, _auth: None = Depends(require_api_key)) -> dict:
-    """Return read-only, unverified evidence candidates from Tavily."""
+def discover_research_sources(
+    payload: ResearchDiscoveryIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Let an authorized reviewer request unverified evidence candidates from Tavily."""
     try:
         return _tavily_client().discover(payload.query, max_results=payload.max_results).to_dict()
     except TavilyError as error:
@@ -826,8 +828,10 @@ def discover_research_sources(payload: ResearchDiscoveryIn, _auth: None = Depend
 
 
 @app.post("/research/discover/arxiv")
-def discover_arxiv_preprints(payload: ResearchDiscoveryIn, _auth: None = Depends(require_api_key)) -> dict:
-    """Return cached, rate-limited, read-only arXiv preprint candidates for later verification."""
+def discover_arxiv_preprints(
+    payload: ResearchDiscoveryIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Let an authorized reviewer request arXiv candidates for later verification."""
     try:
         return _arxiv_client().discover(payload.query, max_results=payload.max_results).to_dict()
     except ArxivError as error:
@@ -836,9 +840,9 @@ def discover_arxiv_preprints(payload: ResearchDiscoveryIn, _auth: None = Depends
 
 @app.post("/research/discover/semantic-scholar")
 def discover_semantic_scholar_papers(
-    payload: ResearchDiscoveryIn, _auth: None = Depends(require_api_key)
+    payload: ResearchDiscoveryIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> dict:
-    """Return cached, rate-limited bibliographic candidates for later independent verification."""
+    """Let an authorized reviewer request bibliographic candidates for verification."""
     try:
         return _semantic_scholar_client().discover(payload.query, max_results=payload.max_results).to_dict()
     except SemanticScholarError as error:
