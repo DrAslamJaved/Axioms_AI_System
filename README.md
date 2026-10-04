@@ -107,6 +107,8 @@ real tool use and optional LLM synthesis:
   PDF, DOCX, and UTF-8 text files into local storage with size and extraction
   limits. An approver can attach immutable document metadata to a task before
   execution approval, but no text is injected into an agent or sent externally.
+  A named administrator can permanently delete a local document; immutable task
+  attachment snapshots retain metadata and hashes only, never document text.
 - **Structured local audit events** include a safe request correlation ID and
   allowlisted lifecycle metadata only. Request bodies, task goals, draft text,
   and document text are deliberately excluded from the log payload.
