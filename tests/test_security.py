@@ -3,6 +3,7 @@ import json
 import pytest
 from fastapi import HTTPException
 
+from axioms.api import app
 from axioms.security import (
     AccessRole,
     SecurityConfigurationError,
@@ -225,3 +226,27 @@ def test_role_dependency_rejects_viewer_but_admits_approver_and_admin(monkeypatc
     assert excinfo.value.status_code == 403
     assert dependency("approve") is None
     assert dependency("admin") is None
+
+
+def test_content_bearing_personal_memory_read_routes_require_an_approver(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Reviewer": {"secret": "approve", "role": "approver"},
+                "Observer": {"secret": "view", "role": "viewer"},
+            }
+        ),
+    )
+    paths = [
+        "/personal-kb/entries",
+        "/episodic-memory/search",
+        "/episodic-memory/{memory_id}/audit",
+    ]
+    for path in paths:
+        route = next(route for route in app.routes if getattr(route, "path", None) == path)
+        dependency = route.dependant.dependencies[0].call
+        with pytest.raises(HTTPException) as excinfo:
+            dependency("view")
+        assert excinfo.value.status_code == 403
+        assert dependency("approve") is None

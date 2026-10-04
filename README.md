@@ -101,6 +101,9 @@ real tool use and optional LLM synthesis:
   agents. Matching entries are snapshotted into the proposed task before human
   approval, then appended only to the matching local review draft; they never
   become verified facts or override evidence, privacy, safety, or approval gates.
+  Approved preference values, searchable episodic-memory summaries, and memory
+  lifecycle audits are content-bearing reviewer views, available only to an
+  `approver` or `admin` in named-key deployments.
 - **Urdu and bilingual content notes** are available only through bounded LLM
   synthesis. Urdu script is validated before a generated note is accepted; a
   malformed result falls back to the deterministic review plan. Every
