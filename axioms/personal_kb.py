@@ -58,6 +58,7 @@ class PreferenceProposal:
     preference_value: str
     rationale: str
     feedback_id: str | None = None
+    agent_types: tuple[AgentName, ...] = ()
     proposal_id: str = ""
     created_at: str = ""
     decision: ProposalDecision | None = None
@@ -67,6 +68,10 @@ class PreferenceProposal:
         if not self.preference_key.strip() or not self.preference_value.strip() or not self.rationale.strip():
             raise ValueError("Preference key, value, and rationale are required.")
         _reject_sensitive_text(self.preference_key, self.preference_value, self.rationale)
+        if len(set(self.agent_types)) != len(self.agent_types):
+            raise ValueError("Agent targets cannot contain duplicates.")
+        if AgentName.CORE in self.agent_types:
+            raise ValueError("Personal KB preferences can target specialist agents only.")
 
 
 class PersonalKnowledgeStore:
@@ -146,6 +151,7 @@ class PersonalKnowledgeStore:
                     "preference_value": payload["preference_value"],
                     "proposal_id": proposal_id,
                     "approved_at": datetime.now(UTC).isoformat(),
+                    "agent_types": [str(agent) for agent in payload.get("agent_types", ())],
                 }
                 connection.execute(
                     "INSERT OR REPLACE INTO kb_entries (entry_key, payload) VALUES (?, ?)",
@@ -157,3 +163,12 @@ class PersonalKnowledgeStore:
         with self._connect() as connection:
             rows = connection.execute("SELECT payload FROM kb_entries ORDER BY entry_key").fetchall()
         return [json.loads(row[0]) for row in rows]
+
+    def entries_for_agent(self, agent: AgentName) -> list[dict]:
+        """Return approved, explicitly scoped entries; legacy unscoped entries remain available to all specialists."""
+        entries: list[dict] = []
+        for entry in self.entries():
+            targets = entry.get("agent_types", [])
+            if not targets or agent.value in targets:
+                entries.append(entry)
+        return entries
