@@ -6,11 +6,12 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+from axioms.audit_log import current_request_id
 from axioms.store import database_path
 
 
 class UsageStore:
-    """Store only provider-reported token totals; never prompts, outputs, or prices."""
+    """Store content-free provider usage with an optional safe request correlation ID."""
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or database_path()
@@ -23,10 +24,14 @@ class UsageStore:
                     provider TEXT NOT NULL,
                     model TEXT NOT NULL,
                     input_tokens INTEGER NOT NULL,
-                    output_tokens INTEGER NOT NULL
+                    output_tokens INTEGER NOT NULL,
+                    request_id TEXT
                 )
                 """
             )
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(llm_usage_events)")}
+            if "request_id" not in columns:
+                connection.execute("ALTER TABLE llm_usage_events ADD COLUMN request_id TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, check_same_thread=False, timeout=5.0)
@@ -35,7 +40,7 @@ class UsageStore:
         return connection
 
     def record(self, *, provider: str, model: str, input_tokens: int, output_tokens: int) -> None:
-        """Append one validated provider-reported usage event with no request content."""
+        """Append provider-reported metadata without prompts, outputs, or prices."""
         if not provider.strip() or not model.strip():
             raise ValueError("Usage events require non-empty provider and model names.")
         if input_tokens < 0 or output_tokens < 0:
@@ -44,8 +49,8 @@ class UsageStore:
             connection.execute(
                 """
                 INSERT INTO llm_usage_events
-                (recorded_at, provider, model, input_tokens, output_tokens)
-                VALUES (?, ?, ?, ?, ?)
+                (recorded_at, provider, model, input_tokens, output_tokens, request_id)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(UTC).isoformat(),
@@ -53,6 +58,7 @@ class UsageStore:
                     model,
                     input_tokens,
                     output_tokens,
+                    current_request_id(),
                 ),
             )
 
