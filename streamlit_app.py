@@ -234,6 +234,60 @@ with st.expander("Task revision lineage", expanded=False):
         )
         st.caption("This inspector is read-only and provides no approval, execution, scheduling, or release controls.")
 
+# --- Manual revision comparison inspector ---
+
+with st.expander("Revision comparison (approver)", expanded=False):
+    st.caption(
+        "Manual, approver-only comparison. In named-key deployments it requires an approver or administrator key; "
+        "it shows only the linked request diff and recorded final rejection context."
+    )
+    with st.form("revision-comparison-inspector"):
+        comparison_task_id = st.text_input(
+            "Revision task ID", placeholder="task_…", key="revision-comparison-task-id"
+        )
+        comparison_submitted = st.form_submit_button("Refresh revision comparison")
+    if comparison_submitted:
+        if not comparison_task_id.strip():
+            st.warning("Enter a revision task ID to inspect its comparison.")
+        else:
+            response = _get(f"{API_URL}/tasks/{comparison_task_id.strip()}/revision-comparison")
+            if response.ok:
+                st.session_state["revision_comparison"] = response.json()
+            else:
+                st.session_state.pop("revision_comparison", None)
+                st.error(f"Error {response.status_code}: {response.text}")
+    revision_comparison = st.session_state.get("revision_comparison")
+    if revision_comparison:
+        st.caption(
+            f"Original task: {revision_comparison['original_task_id']} · "
+            f"revision: {revision_comparison['revision_task_id']}"
+        )
+        request_changes = revision_comparison["request_changes"]
+        if request_changes:
+            st.dataframe(
+                [
+                    {"Field": item["field"], "Original": item["before"] or "—", "Revision": item["after"] or "—"}
+                    for item in request_changes
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+        else:
+            st.info("No request-field differences were recorded for this linked revision.")
+        original_review = revision_comparison["original_final_review"]
+        revision_governance = revision_comparison["revision_governance"]
+        review_columns = st.columns(3)
+        review_columns[0].metric("Original review", original_review["status"])
+        review_columns[1].metric("Revision lifecycle", revision_governance["status"])
+        review_columns[2].metric(
+            "Fresh approval required",
+            "Yes" if revision_governance["fresh_human_approval_required"] else "No",
+        )
+        st.caption(f"Original reviewer: {original_review['reviewed_by'] or 'not recorded'}")
+        st.markdown("**Recorded final-review rejection note**")
+        st.info(original_review["rejection_note"] or "No rejection note is available.")
+        st.caption("This inspector is read-only and provides no approval, execution, scheduling, or release controls.")
+
 # --- Manual provider usage summary ---
 
 with st.expander("Local provider usage summary", expanded=False):
