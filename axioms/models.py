@@ -63,6 +63,7 @@ class StepKind(StrEnum):
     CROSS_AGENT_AUTOEVAL_CREATED = "cross_agent_autoeval_created"
     REVISION_CREATED = "revision_created"
     PREFERENCE_CONTEXT_SNAPSHOTTED = "preference_context_snapshotted"
+    REFERENCE_DOCUMENT_ATTACHED = "reference_document_attached"
 
 
 @dataclass(slots=True)
@@ -110,6 +111,7 @@ class TaskRecord:
     deliverables: list[Deliverable] = field(default_factory=list)
     agent_trace: list[AgentStep] = field(default_factory=list)
     preference_context: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    reference_documents: list[dict[str, Any]] = field(default_factory=list)
     approval_note: str | None = None
     approved_by: str | None = None
     reviewed_by: str | None = None
