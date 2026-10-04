@@ -449,3 +449,16 @@ def test_detailed_readiness_route_requires_an_approver(monkeypatch) -> None:
         dependency("view")
     assert excinfo.value.status_code == 403
     assert dependency("approve") is None
+
+
+def test_specialist_registry_requires_an_authenticated_key(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps({"Observer": {"secret": "view", "role": "viewer"}}),
+    )
+    route = next(route for route in app.routes if getattr(route, "path", None) == "/agents")
+    dependency = route.dependant.dependencies[0].call
+    with pytest.raises(HTTPException) as excinfo:
+        dependency(None)
+    assert excinfo.value.status_code == 401
+    assert dependency("view") is None
