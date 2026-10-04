@@ -4,8 +4,8 @@
 
 - Axioms Core routes recognisable requests to all eight specialist profiles.
 - `GET /agents` exposes the implemented specialist registry and its typed API endpoint.
-- `GET /system/readiness` distinguishes implemented local capabilities from deferred
-  infrastructure.
+- Approver- or administrator-authorized `GET /system/readiness` distinguishes
+  implemented local capabilities from deferred infrastructure.
 - Every Core hand-off remains review-first and records no external side effect.
 
 ## Deliberate deferrals

@@ -13,8 +13,9 @@ Two modes are supported:
   identity binding. ``approved_by`` still comes from the request body -- honest
   but not authenticated.
 
-When neither is set the app runs in open development mode, reported truthfully
-by ``GET /health``.
+When neither is set the app runs in open development mode. Deployment posture
+is available only through the authenticated readiness report, not the public
+liveness probe.
 """
 
 from __future__ import annotations

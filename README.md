@@ -335,8 +335,10 @@ In named-key deployments this content-bearing view requires an `approver` or
 Use authenticated `GET /tasks/{task_id}/status` for metadata-only polling; it
 returns lifecycle state and counts, never task content, drafts, or review notes.
 Use authenticated `GET /tasks?status=awaiting_review&limit=50` for a read-only work queue. Pass the returned `next_cursor` to retrieve the next page.
-Use `GET /health` to verify authentication posture and provider status.
-Use `GET /system/readiness` for a full component report.
+Use unauthenticated `GET /health` for a liveness probe only; it deliberately
+does not expose authentication, provider, or approval configuration. Use
+`GET /system/readiness` with an `approver` or `admin` key in named-key
+deployments for the detailed local component report.
 Use authenticated `GET /operations/summary` for aggregate local task and worker-lease health; it is read-only and never runs or changes work.
 
 Every API response includes an `X-Request-ID` header. Provide a safe
@@ -391,8 +393,9 @@ disabled; this authorization boundary also applies when the local fallback is us
 
 ## System integration and readiness
 
-`GET /agents` lists the implemented specialist capabilities. `GET /system/readiness`
-returns a truthful component report — implemented components (Core runtime,
+`GET /agents` lists the implemented specialist capabilities. Approver- or
+administrator-authorized `GET /system/readiness` returns a truthful component
+report — implemented components (Core runtime,
 authentication, LLM seam, bounded scholarly discovery, agentic research, durable local dispatch, local deployment) and
 deferred infrastructure (Redis, semantic retrieval, LangGraph, external connectors,
 cloud deployment).
