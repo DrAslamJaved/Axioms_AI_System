@@ -1,9 +1,11 @@
 import json
+import logging
 
 import pytest
 from fastapi import HTTPException
 
 from axioms.api import app
+from axioms.audit_log import LOGGER, bind_request_id, reset_request_id
 from axioms.security import (
     AccessRole,
     SecurityConfigurationError,
@@ -53,6 +55,24 @@ def test_external_provider_consent_is_required_only_for_configured_external_llms
 
     monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "openai")
     assert require_external_provider_consent("yes") is None
+
+
+def test_accepted_external_provider_consent_is_audited_without_request_content(monkeypatch, caplog) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "anthropic")
+    caplog.set_level(logging.INFO, logger=LOGGER.name)
+    token = bind_request_id("consent-run_2026")
+    try:
+        assert require_external_provider_consent("true") is None
+    finally:
+        reset_request_id(token)
+
+    payload = json.loads(caplog.records[-1].message)
+    assert payload == {
+        "event": "external_provider_consent_accepted",
+        "provider": "anthropic",
+        "request_id": "consent-run_2026",
+        "timestamp": payload["timestamp"],
+    }
 
 
 def test_wrong_key_is_rejected(monkeypatch) -> None:

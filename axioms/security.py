@@ -29,6 +29,8 @@ from enum import StrEnum
 
 from fastapi import Header, HTTPException
 
+from axioms.audit_log import log_event
+
 
 class SecurityConfigurationError(ValueError):
     """Raised when AXIOMS_API_KEYS is present but unsafe or invalid."""
@@ -253,3 +255,5 @@ def require_external_provider_consent(
             status_code=428,
             detail="External LLM use requires X-Axioms-Allow-External-Provider: true for this request.",
         )
+    if provider in _EXTERNAL_LLM_PROVIDERS:
+        log_event("external_provider_consent_accepted", provider=provider)

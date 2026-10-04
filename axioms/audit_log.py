@@ -23,6 +23,7 @@ _ALLOWED_FIELDS = {
     "path",
     "duration_ms",
     "principal",
+    "provider",
 }
 LOGGER = logging.getLogger("axioms.audit")
 
