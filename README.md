@@ -82,8 +82,9 @@ real tool use and optional LLM synthesis:
   Assessment Design, internal Content Creation planning, internal Social Media
   asset planning, and internal STEM AI Portfolio structure planning can use
   bounded synthesis when a provider is configured; malformed, disabled, or
-  failed responses retain their fixed, review-first templates. AutoEval remains
-  deterministic.
+  failed responses retain their fixed, review-first templates. AutoEval keeps
+  deterministic checks authoritative and limits provider use to an optional
+  qualitative summary.
 - **SQLite** stores task episodes, a consented episodic-memory ledger, and an
   approved Personal Knowledge Base (PKB). Episodic memory retains only
   owner-approved, non-sensitive task summaries — never draft content by default.
