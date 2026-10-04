@@ -678,7 +678,8 @@ def decide_preference_proposal(
 
 
 @app.get("/personal-kb/entries")
-def list_personal_kb_entries(_auth: None = Depends(require_api_key)) -> list[dict]:
+def list_personal_kb_entries(_auth: None = Depends(require_role(AccessRole.APPROVER))) -> list[dict]:
+    """Return approved owner preferences only to an authorized human reviewer."""
     return core.kb_store.entries()
 
 
@@ -717,8 +718,9 @@ def decide_episodic_memory(
 
 @app.get("/episodic-memory/search")
 def search_episodic_memory(
-    query: str, limit: int = 5, _auth: None = Depends(require_api_key)
+    query: str, limit: int = 5, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> list[dict]:
+    """Search approved local memory summaries only for an authorized human reviewer."""
     try:
         return core.recall_episodic_memory(query, limit=limit)
     except ValueError as error:
@@ -742,8 +744,10 @@ def delete_episodic_memory(
 
 
 @app.get("/episodic-memory/{memory_id}/audit")
-def audit_episodic_memory(memory_id: str, _auth: None = Depends(require_api_key)) -> dict:
-    """Expose lifecycle provenance while never returning deleted or expired memory content."""
+def audit_episodic_memory(
+    memory_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Expose approved memory lifecycle provenance only to an authorized human reviewer."""
     try:
         return core.audit_episodic_memory(memory_id)
     except KeyError as error:
