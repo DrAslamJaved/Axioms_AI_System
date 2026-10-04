@@ -594,8 +594,10 @@ async def ingest_document(
 
 
 @app.get("/documents/{document_id}")
-def get_document_metadata(document_id: str, _auth: None = Depends(require_api_key)) -> dict:
-    """Return reference-document metadata only; extracted text remains local and non-public."""
+def get_document_metadata(
+    document_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Return local document metadata only to an authorized human reviewer."""
     document = document_store.get_metadata(document_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")

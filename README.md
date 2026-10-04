@@ -114,6 +114,8 @@ real tool use and optional LLM synthesis:
   execution approval, but no text is injected into an agent or sent externally.
   A named administrator can permanently delete a local document; immutable task
   attachment snapshots retain metadata and hashes only, never document text.
+  In named-key deployments, document metadata reads require an `approver` or
+  `admin` key so local filenames and provenance are not exposed to viewers.
 - **Structured local audit events** include a safe request correlation ID and
   allowlisted lifecycle metadata only. Request bodies, task goals, draft text,
   and document text are deliberately excluded from the log payload.
