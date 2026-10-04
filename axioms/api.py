@@ -396,9 +396,12 @@ class PreferenceProposalIn(BaseModel):
     preference_value: str = Field(min_length=2, max_length=1000)
     rationale: str = Field(min_length=5, max_length=2000)
     feedback_id: str | None = Field(default=None, max_length=100)
+    agent_types: list[AgentName] = Field(default_factory=list, max_length=8)
 
     def to_proposal(self) -> PreferenceProposal:
-        return PreferenceProposal(**self.model_dump())
+        data = self.model_dump()
+        data["agent_types"] = tuple(self.agent_types)
+        return PreferenceProposal(**data)
 
 
 class ProposalDecisionIn(BaseModel):
