@@ -7,6 +7,7 @@ from axioms import core as core_module
 from axioms.core import AxiomsCore, BlockedApprovalError, TaskStateError
 from axioms.episodic_memory import MemoryDecision
 from axioms.models import AgentName, ApprovalDecision, StepKind, TaskRequest, TaskStatus
+from axioms.personal_kb import PreferenceCategory, PreferenceProposal, ProposalDecision
 from axioms.store import TaskStore
 
 
@@ -22,6 +23,33 @@ def test_task_creation_persists_a_plan_without_executing_agents(tmp_path: Path) 
     assert [step.kind for step in record.agent_trace] == [StepKind.PLAN_CREATED]
     assert record.graph_version == "routing.v1"
     assert record.graph_digest is not None
+
+
+def test_approved_scoped_preferences_are_snapshotted_and_injected_only_into_matching_drafts(
+    tmp_path: Path,
+) -> None:
+    core = _core(tmp_path)
+    proposal = core.kb_store.propose(
+        PreferenceProposal(
+            category=PreferenceCategory.TEACHING_STYLE,
+            preference_key="explanation_sequence",
+            preference_value="Use intuition before formal notation.",
+            rationale="Owner preference for lecture planning.",
+            agent_types=(AgentName.LECTURE,),
+        )
+    )
+    core.kb_store.decide(proposal["proposal_id"], ProposalDecision.APPROVE, "Reviewed")
+
+    record = core.create_task(TaskRequest(goal="Prepare a lecture and write a report"))
+    assert list(record.preference_context) == [AgentName.LECTURE.value]
+    assert record.agent_trace[-1].kind is StepKind.PREFERENCE_CONTEXT_SNAPSHOTTED
+
+    core.decide(record.task_id, ApprovalDecision.APPROVE, approved_by="Dr Aslam")
+    executed = core.execute(record.task_id)
+    drafts = {item["agent"]: item["content"] for item in executed["deliverables"]}
+    assert "Use intuition before formal notation." in drafts[AgentName.LECTURE.value]
+    assert "Use intuition before formal notation." not in drafts[AgentName.WRITING.value]
+    assert "do not override evidence" in drafts[AgentName.LECTURE.value]
 
 
 def test_approved_task_executes_then_requires_final_review(tmp_path: Path) -> None:
