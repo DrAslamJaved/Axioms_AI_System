@@ -652,7 +652,8 @@ def attach_reference_document(
 
 
 @app.post("/feedback")
-def record_feedback(payload: FeedbackIn, _auth: None = Depends(require_api_key)) -> dict:
+def record_feedback(payload: FeedbackIn, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
+    """Record durable feedback only for an authorized human reviewer."""
     try:
         return core.kb_store.record_feedback(payload.to_record())
     except ValueError as error:
@@ -660,7 +661,10 @@ def record_feedback(payload: FeedbackIn, _auth: None = Depends(require_api_key))
 
 
 @app.post("/personal-kb/proposals")
-def create_preference_proposal(payload: PreferenceProposalIn, _auth: None = Depends(require_api_key)) -> dict:
+def create_preference_proposal(
+    payload: PreferenceProposalIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Create a durable preference proposal only for an authorized human reviewer."""
     try:
         return core.kb_store.propose(payload.to_proposal())
     except ValueError as error:
@@ -686,7 +690,10 @@ def list_personal_kb_entries(_auth: None = Depends(require_role(AccessRole.APPRO
 
 
 @app.post("/tasks/{task_id}/memory-proposal")
-def propose_episodic_memory(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+def propose_episodic_memory(
+    task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Propose durable episodic memory only for an authorized human reviewer."""
     try:
         return core.propose_episodic_memory(task_id)
     except KeyError as error:
