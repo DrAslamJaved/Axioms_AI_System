@@ -882,7 +882,10 @@ def create_portfolio_package_docx(
 @app.post("/autoeval-reports")
 def create_autoeval_report(payload: AutoEvalReportIn, _auth: None = Depends(require_api_key)) -> dict:
     try:
-        return evaluate_deliverable(payload.to_agent_request()).to_dict()
+        provider = get_provider()
+        return evaluate_deliverable(payload.to_agent_request(), provider=provider).to_dict()
+    except LLMConfigurationError as error:
+        raise HTTPException(status_code=503, detail=f"LLM provider misconfigured: {error}") from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -892,7 +895,10 @@ def create_autoeval_report_docx(
     payload: AutoEvalReportIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
 ) -> FileResponse:
     try:
-        report = evaluate_deliverable(payload.to_agent_request())
+        provider = get_provider()
+        report = evaluate_deliverable(payload.to_agent_request(), provider=provider)
+    except LLMConfigurationError as error:
+        raise HTTPException(status_code=503, detail=f"LLM provider misconfigured: {error}") from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return _docx_response(lambda path: export_autoeval_docx(report, path), "autoeval_report.docx", background)
