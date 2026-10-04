@@ -3,7 +3,8 @@
 ## Implemented integration spine
 
 - Axioms Core routes recognisable requests to all eight specialist profiles.
-- `GET /agents` exposes the implemented specialist registry and its typed API endpoint.
+- Authenticated `GET /agents` exposes the implemented specialist registry and
+  its typed API endpoint.
 - Approver- or administrator-authorized `GET /system/readiness` distinguishes
   implemented local capabilities from deferred infrastructure.
 - Every Core hand-off remains review-first and records no external side effect.

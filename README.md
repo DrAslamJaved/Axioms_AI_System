@@ -394,9 +394,9 @@ disabled; this authorization boundary also applies when the local fallback is us
 
 ## System integration and readiness
 
-`GET /agents` lists the implemented specialist capabilities. Approver- or
-administrator-authorized `GET /system/readiness` returns a truthful component
-report — implemented components (Core runtime,
+Authenticated `GET /agents` lists the implemented specialist capabilities.
+Approver- or administrator-authorized `GET /system/readiness` returns a
+truthful component report — implemented components (Core runtime,
 authentication, LLM seam, bounded scholarly discovery, agentic research, durable local dispatch, local deployment) and
 deferred infrastructure (Redis, semantic retrieval, LangGraph, external connectors,
 cloud deployment).
