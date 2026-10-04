@@ -178,7 +178,7 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | `CROSSREF_MAILTO` | Polite Crossref identification (recommended) | unset |
 | `TAVILY_API_KEY` | Enables read-only research discovery | unset (disabled) |
 
-In named-key mode, `viewer` keys can inspect protected records but cannot make
+In named-key mode, `viewer` keys can inspect authenticated work-queue metadata but cannot make
 approval, revision, recovery, or memory-governance decisions. `approver` keys
 may make those reviewed decisions, and only `admin` keys can acknowledge a
 HIGH-risk data-governance override. Existing single-key and legacy named-key
@@ -300,6 +300,8 @@ curl -X POST http://127.0.0.1:8000/tasks/{task_id}/reference-documents \
 ```
 
 Use `GET /tasks/{task_id}` to inspect the plan, lifecycle state, drafts, and agent trace.
+In named-key deployments this content-bearing view requires an `approver` or
+`admin` key.
 Use authenticated `GET /tasks?status=awaiting_review&limit=50` for a read-only work queue. Pass the returned `next_cursor` to retrieve the next page.
 Use `GET /health` to verify authentication posture and provider status.
 Use `GET /system/readiness` for a full component report.
@@ -345,6 +347,7 @@ location suitable for the institution's data-retention policy.
 | Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
 | Task revision | `POST /tasks/{task_id}/revise` after final rejection | Creates a linked new task; fresh approval remains required |
 | Task work queue | `GET /tasks` | Authenticated metadata projection only; excludes goals, drafts, preferences, documents, and reviewer notes |
+| Task detail | `GET /tasks/{task_id}` | Content-bearing review route; `approver` or `admin` only in named-key deployments |
 | Task lineage | `GET /tasks/{task_id}/lineage` | Authenticated, metadata-only revision-family audit |
 | Revision comparison | `GET /tasks/{task_id}/revision-comparison` | Authenticated parent-to-revision diff; no state changes |
 
