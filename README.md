@@ -34,12 +34,16 @@ real tool use and optional LLM synthesis:
 - **Research discovery** can use Tavily as a bounded, read-only search tool to
   collect unverified source candidates with retrieval provenance. Candidates
   cannot be cited or synthesised until they pass the existing verification flow.
+  In named-key deployments, starting this external lookup requires an
+  `approver` or `admin` key.
 - **arXiv discovery** adds cached, rate-limited, read-only preprint candidates
   with Atom provenance. A preprint is neither peer-reviewed evidence nor a
   verified claim and remains ineligible for synthesis until separately checked.
+  Starting the external lookup requires an `approver` or `admin` key.
 - **Semantic Scholar discovery** adds keyed, cached, rate-limited, read-only
   bibliographic candidates. Its metadata and citation counts are discovery
   signals only, not evidence of quality, publication status, or claim validity.
+  Starting the external lookup requires an `approver` or `admin` key.
 - **Durable local dispatch** queues only approved local tasks in SQLite with an
   idempotency key, atomic leased worker claim, bounded retry, and dead-letter state.
   A manually invoked local worker runs deterministic drafts only; it cannot
@@ -200,7 +204,7 @@ Copy `.env.example` and set the values appropriate to your deployment:
 
 In named-key mode, `viewer` keys can inspect authenticated work-queue metadata but cannot make
 approval, revision, recovery, memory-governance, dispatch, or local-execution
-decisions. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
+decisions or initiate external research discovery. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
 HIGH-risk data-governance override. Existing single-key and legacy named-key
 deployments retain their prior administrator-equivalent behaviour.
 
@@ -356,9 +360,9 @@ location suitable for the institution's data-retention policy.
 | Writing & Communication | `POST /writing-drafts` | `POST /writing-drafts/docx` |
 | Research (deterministic) | `POST /research-briefs` | `POST /research-briefs/docx` |
 | Research (agentic) | `POST /research-briefs/agentic` | — |
-| Research discovery (read-only) | `POST /research/discover` | — |
-| arXiv preprint discovery (read-only) | `POST /research/discover/arxiv` | — |
-| Semantic Scholar discovery (read-only) | `POST /research/discover/semantic-scholar` | — |
+| Research discovery (read-only) | `POST /research/discover` | `approver` or `admin` in named-key deployments |
+| arXiv preprint discovery (read-only) | `POST /research/discover/arxiv` | `approver` or `admin` in named-key deployments |
+| Semantic Scholar discovery (read-only) | `POST /research/discover/semantic-scholar` | `approver` or `admin` in named-key deployments |
 | Durable local dispatch | `POST /tasks/{task_id}/dispatch`; `POST /dispatch/run-one` | `POST /dispatch/jobs/claim`; `POST /dispatch/jobs/{job_id}/finish` |
 | Similarity screening (local review signal) | `POST /similarity/screen` | — |
 | Assessment Design | `POST /assessment-blueprints`; `POST /assessment-blueprints/agentic` | student + instructor DOCX; instructor-only review |
