@@ -280,6 +280,7 @@ def test_task_lineage_handler_returns_metadata_only_revision_family(tmp_path: Pa
 
     assert lineage["root_task_id"] == root.task_id
     assert [item["task_id"] for item in lineage["items"]] == [root.task_id, revision["task_id"]]
+    assert "goal" not in lineage["items"][0]
     assert "approval_note" not in lineage["items"][0]
 
 

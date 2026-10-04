@@ -67,8 +67,8 @@ real tool use and optional LLM synthesis:
   remains rejected; the new task carries the feedback as draft context and must
   receive fresh approval before it can execute.
 - **Read-only task lineage** gives authenticated reviewers a stable revision
-  family view with lifecycle metadata only. It excludes drafts and reviewer
-  notes, and it cannot approve, alter, rerun, or release any task.
+  family view with lifecycle metadata only. It excludes task goals, drafts, and
+  reviewer notes, and it cannot approve, alter, rerun, or release any task.
 - **Revision comparison** gives an authenticated reviewer the direct parent-to-
   revision request diff, the recorded final-review rejection note, and the
   current execution boundary before a fresh approval decision.
@@ -361,7 +361,7 @@ location suitable for the institution's data-retention policy.
 | Task work queue | `GET /tasks` | Authenticated metadata projection only; excludes goals, drafts, preferences, documents, and reviewer notes |
 | Task status | `GET /tasks/{task_id}/status` | Authenticated polling metadata only; excludes requests, drafts, and reviewer notes |
 | Task detail | `GET /tasks/{task_id}` | Content-bearing review route; `approver` or `admin` only in named-key deployments |
-| Task lineage | `GET /tasks/{task_id}/lineage` | Authenticated, metadata-only revision-family audit |
+| Task lineage | `GET /tasks/{task_id}/lineage` | Authenticated revision-family metadata only; excludes task goals, drafts, and notes |
 | Revision comparison | `GET /tasks/{task_id}/revision-comparison` | Authenticated parent-to-revision diff; no state changes |
 
 ## System integration and readiness
