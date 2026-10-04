@@ -21,6 +21,11 @@ with st.sidebar:
         value="Dr Aslam",
         help="Used for approval identity in single-key mode. In named-key mode this is derived from the key.",
     )
+    allow_external_provider = st.checkbox(
+        "Allow external LLM for this request",
+        value=False,
+        help="Required on each generation request when Anthropic or OpenAI is configured. Leave off for local deterministic fallback.",
+    )
     st.divider()
     st.caption("System posture")
     try:
@@ -31,10 +36,11 @@ with st.sidebar:
 
 
 def _headers() -> dict[str, str]:
-    """Build request headers, including the API key when configured."""
-    if api_key:
-        return {"X-API-Key": api_key}
-    return {}
+    """Build request headers from the explicit local review choices."""
+    headers = {"X-API-Key": api_key} if api_key else {}
+    if allow_external_provider:
+        headers["X-Axioms-Allow-External-Provider"] = "true"
+    return headers
 
 
 def _post(url: str, payload: dict, *, timeout: int = 30) -> requests.Response:
