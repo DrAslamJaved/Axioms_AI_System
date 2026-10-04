@@ -251,6 +251,7 @@ def require_external_provider_consent(
     provider = os.getenv("AXIOMS_LLM_PROVIDER", "disabled").strip().casefold()
     consented = (x_axioms_allow_external_provider or "").strip().casefold() in {"1", "true", "yes"}
     if provider in _EXTERNAL_LLM_PROVIDERS and not consented:
+        log_event("external_provider_consent_missing", provider=provider)
         raise HTTPException(
             status_code=428,
             detail="External LLM use requires X-Axioms-Allow-External-Provider: true for this request.",
