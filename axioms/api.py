@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,7 @@ from axioms.content_agent import ContentFormat, ContentRequest, LanguageMode, bu
 from axioms.content_agent import export_docx as export_content_docx
 from axioms.content_agent_ai import run_agentic_content_review
 from axioms.core import AxiomsCore, BlockedApprovalError, TaskStateError
+from axioms.document_ingestion import DocumentIngestionError, DocumentStore
 from axioms.episodic_memory import MemoryDecision
 from axioms.integration import build_system_readiness_report
 from axioms.lecture_agent import LectureRequest, build_lecture_plan, export_docx
@@ -97,11 +98,14 @@ from axioms.writing_agent import export_docx as export_writing_docx
 
 app = FastAPI(title="Axioms AI System", version="0.2.0")
 core = AxiomsCore()
+document_store = DocumentStore()
 _ARXIV_CLIENT = ArxivClient()
 _SEMANTIC_SCHOLAR_CLIENTS: dict[str, SemanticScholarClient] = {}
 
 DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ROLE_DEPENDENCY = Depends(resolve_role)
+DOCUMENT_FILE = File(...)
+DOCUMENT_NON_SENSITIVE_CONFIRMATION = Form(...)
 
 
 def _crossref_client() -> CrossrefClient:
@@ -507,6 +511,40 @@ def system_readiness() -> dict:
 def operations_summary(_auth: None = Depends(require_api_key)) -> dict:
     """Return read-only aggregate task and local-worker health for human operators."""
     return core.operational_summary()
+
+
+@app.post("/documents")
+async def ingest_document(
+    document: UploadFile = DOCUMENT_FILE,
+    confirmed_non_sensitive: bool = DOCUMENT_NON_SENSITIVE_CONFIRMATION,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+) -> dict:
+    """Extract and retain one explicitly non-sensitive local reference document.
+
+    The extracted content is not returned, attached to an agent, or sent to an
+    external provider. A later, separately approved task-attachment feature is
+    required before any agent can use it as context.
+    """
+    try:
+        content = await document.read()
+        return document_store.ingest(
+            content,
+            document.filename or "",
+            confirmed_non_sensitive=confirmed_non_sensitive,
+        ).to_dict()
+    except DocumentIngestionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    finally:
+        await document.close()
+
+
+@app.get("/documents/{document_id}")
+def get_document_metadata(document_id: str, _auth: None = Depends(require_api_key)) -> dict:
+    """Return reference-document metadata only; extracted text remains local and non-public."""
+    document = document_store.get_metadata(document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return document.to_dict()
 
 
 @app.post("/feedback")
