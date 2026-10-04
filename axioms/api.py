@@ -56,7 +56,6 @@ from axioms.personal_kb import (
     PreferenceProposal,
     ProposalDecision,
 )
-from axioms.policy import STRICT_MODE
 from axioms.portfolio_agent import (
     DataAccessLevel,
     DatasetAsset,
@@ -79,7 +78,6 @@ from axioms.research_agent import export_docx as export_research_docx
 from axioms.research_agent_ai import run_agentic_research_brief
 from axioms.security import (
     AccessRole,
-    auth_mode,
     ensure_role,
     require_api_key,
     require_role,
@@ -533,17 +531,8 @@ class DispatchRunIn(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    try:
-        provider_name = get_provider().name
-    except Exception:  # noqa: BLE001 - readiness reports provider configuration without failing
-        provider_name = "misconfigured"
-    return {
-        "status": "ok",
-        "mode": "human-governed",
-        "auth": auth_mode(),
-        "llm_provider": provider_name,
-        "approval_mode": os.getenv("AXIOMS_APPROVAL_MODE", STRICT_MODE),
-    }
+    """Return an unauthenticated liveness response without deployment details."""
+    return {"status": "ok"}
 
 
 @app.get("/agents")
@@ -552,7 +541,8 @@ def list_agents() -> list[dict]:
 
 
 @app.get("/system/readiness")
-def system_readiness() -> dict:
+def system_readiness(_auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
+    """Return the detailed local configuration report only to an authorized reviewer."""
     return build_system_readiness_report().to_dict()
 
 
