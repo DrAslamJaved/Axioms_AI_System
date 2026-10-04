@@ -46,6 +46,7 @@ real tool use and optional LLM synthesis:
   perform external actions. An expired worker lease requeues only the job within
   its retry budget; task recovery remains a separate human-confirmed action.
   Individual dispatch-job records are approver-only in named-key deployments;
+  dispatch state changes and local execution are also approver-only, while
   authenticated viewers retain only the aggregate local operations summary.
 - **Versioned task graphs** attach a deterministic `routing.v1` graph and hash
   to every task. Dependencies are validated for missing nodes and cycles before
@@ -198,8 +199,8 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | `TAVILY_API_KEY` | Enables read-only research discovery | unset (disabled) |
 
 In named-key mode, `viewer` keys can inspect authenticated work-queue metadata but cannot make
-approval, revision, recovery, or memory-governance decisions. `approver` keys
-may make those reviewed decisions, and only `admin` keys can acknowledge a
+approval, revision, recovery, memory-governance, dispatch, or local-execution
+decisions. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
 HIGH-risk data-governance override. Existing single-key and legacy named-key
 deployments retain their prior administrator-equivalent behaviour.
 

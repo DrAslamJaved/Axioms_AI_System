@@ -1137,9 +1137,9 @@ def compare_task_revision(
 
 @app.post("/tasks/{task_id}/dispatch")
 def dispatch_approved_task(
-    task_id: str, payload: DispatchIn, _auth: None = Depends(require_api_key)
+    task_id: str, payload: DispatchIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> dict:
-    """Queue an already-approved local task; no task execution starts in this request."""
+    """Queue an already-approved local task only for an authorized human reviewer."""
     try:
         return core.enqueue_approved_task(
             task_id,
@@ -1164,8 +1164,10 @@ def get_dispatch_job(
 
 
 @app.post("/dispatch/jobs/claim")
-def claim_dispatch_job(payload: DispatchClaimIn, _auth: None = Depends(require_api_key)) -> dict | None:
-    """Atomically claim one queued job for a named worker; this cannot execute an external action."""
+def claim_dispatch_job(
+    payload: DispatchClaimIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict | None:
+    """Claim one queued local job only for an authorized human reviewer."""
     try:
         job = core.dispatch_store.claim_next(payload.worker_id)
     except ValueError as error:
@@ -1175,9 +1177,9 @@ def claim_dispatch_job(payload: DispatchClaimIn, _auth: None = Depends(require_a
 
 @app.post("/dispatch/jobs/{job_id}/finish")
 def finish_dispatch_job(
-    job_id: str, payload: DispatchFinishIn, _auth: None = Depends(require_api_key)
+    job_id: str, payload: DispatchFinishIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> dict:
-    """Record a worker outcome; failures are retried only within the fixed job budget."""
+    """Record a local worker outcome only for an authorized human reviewer."""
     try:
         return core.dispatch_store.finish(
             job_id,
@@ -1194,9 +1196,9 @@ def finish_dispatch_job(
 
 @app.post("/dispatch/jobs/{job_id}/renew")
 def renew_dispatch_lease(
-    job_id: str, payload: DispatchRenewIn, _auth: None = Depends(require_api_key)
+    job_id: str, payload: DispatchRenewIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> dict:
-    """Extend a still-valid local lease held by the named worker only."""
+    """Extend a local lease only for an authorized human reviewer."""
     try:
         return core.dispatch_store.renew_lease(
             job_id, worker_id=payload.worker_id, lease_seconds=payload.lease_seconds
@@ -1208,8 +1210,10 @@ def renew_dispatch_lease(
 
 
 @app.post("/dispatch/run-one")
-def run_one_dispatch_job(payload: DispatchRunIn, _auth: None = Depends(require_api_key)) -> dict | None:
-    """Run one claimed, already-approved task using local deterministic drafting only."""
+def run_one_dispatch_job(
+    payload: DispatchRunIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict | None:
+    """Run one approved local task only for an authorized human reviewer."""
     try:
         return core.run_one_dispatched_task(payload.worker_id)
     except ValueError as error:
@@ -1218,9 +1222,9 @@ def run_one_dispatch_job(payload: DispatchRunIn, _auth: None = Depends(require_a
 
 @app.post("/tasks/{task_id}/execute")
 def execute_task(
-    task_id: str, parallel: bool = False, _auth: None = Depends(require_api_key)
+    task_id: str, parallel: bool = False, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> dict:
-    """Run approved local drafts; ``parallel=true`` is opt-in for independent graph layers only."""
+    """Run approved local drafts only for an authorized human reviewer."""
     try:
         result = core.execute(task_id, parallel=parallel)
         log_event("task_execution_completed", task_id=task_id, status=result["status"])
