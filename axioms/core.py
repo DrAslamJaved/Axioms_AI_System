@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 
 from axioms.agents import (
     apply_approved_preferences,
@@ -151,6 +152,49 @@ class AxiomsCore:
                     "Execution authorised by a human approver."
                     if status is TaskStatus.APPROVED
                     else "Task rejected before execution."
+                ),
+            )
+        )
+        self.store.save(record)
+        return record.to_dict()
+
+    def attach_reference_document(
+        self, task_id: str, document: dict, *, attached_by: str
+    ) -> dict:
+        """Record one immutable document-metadata attachment before task approval.
+
+        This is a provenance and review record only. It deliberately does not
+        read or inject extracted document content into any specialist or LLM.
+        """
+        payload = self.store.get(task_id)
+        if payload is None:
+            raise KeyError(task_id)
+        status = TaskStatus(payload["status"])
+        if status not in {TaskStatus.PLANNED, TaskStatus.PENDING_APPROVAL}:
+            raise TaskStateError(
+                "Reference documents can be attached only before a task receives execution approval."
+            )
+        document_id = str(document["document_id"])
+        existing = payload.get("reference_documents", [])
+        if any(entry.get("document_id") == document_id for entry in existing):
+            raise ValueError("This reference document is already attached to the task.")
+        attachment = {
+            "document_id": document_id,
+            "filename": str(document["filename"]),
+            "media_type": str(document["media_type"]),
+            "char_count": int(document["char_count"]),
+            "sha256": str(document["sha256"]),
+            "attached_by": attached_by,
+            "attached_at": datetime.now(UTC).isoformat(),
+        }
+        record = _record_from_payload(payload)
+        record.reference_documents.append(attachment)
+        record.agent_trace.append(
+            AgentStep(
+                kind=StepKind.REFERENCE_DOCUMENT_ATTACHED,
+                summary=(
+                    f"Attached local reference document {attachment['filename']} "
+                    f"({attachment['sha256'][:12]}) for pre-approval review; no content was injected."
                 ),
             )
         )
@@ -883,6 +927,9 @@ def _record_from_payload(payload: dict) -> TaskRecord:
         for agent, entries in payload.get("preference_context", {}).items()
         if isinstance(entries, list)
     }
+    record.reference_documents = [
+        dict(item) for item in payload.get("reference_documents", []) if isinstance(item, dict)
+    ]
     record.reviewed_by = payload.get("reviewed_by")
     record.revision_of = payload.get("revision_of")
     record.revision_requested_by = payload.get("revision_requested_by")
