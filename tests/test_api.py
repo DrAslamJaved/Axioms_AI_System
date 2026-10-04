@@ -297,6 +297,7 @@ def test_revision_comparison_handler_returns_the_parent_diff(tmp_path: Path, mon
 
     assert comparison["original_task_id"] == original.task_id
     assert comparison["request_changes"][0]["field"] == "revision_note"
+    assert comparison["original_final_review"]["rejection_note"] == "Include an example."
     assert comparison["revision_governance"]["fresh_human_approval_required"]
 
 
