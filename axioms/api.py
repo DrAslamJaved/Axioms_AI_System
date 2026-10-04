@@ -764,7 +764,9 @@ def audit_episodic_memory(
 
 
 @app.post("/similarity/screen")
-def similarity_screen(payload: SimilarityScreenIn, _auth: None = Depends(require_api_key)) -> dict:
+def similarity_screen(
+    payload: SimilarityScreenIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
     """Screen supplied texts locally and return review signals, never an originality verdict."""
     try:
         return screen_similarity(payload.to_similarity_request()).to_dict()
@@ -773,7 +775,7 @@ def similarity_screen(payload: SimilarityScreenIn, _auth: None = Depends(require
 
 
 @app.post("/tasks")
-def create_task(payload: TaskIn, _auth: None = Depends(require_api_key)) -> dict:
+def create_task(payload: TaskIn, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
     return core.create_task(TaskRequest(**payload.model_dump())).to_dict()
 
 
@@ -816,7 +818,7 @@ def create_writing_draft_docx(
 
 
 @app.post("/research-briefs")
-def create_research_brief(payload: ResearchBriefIn, _auth: None = Depends(require_api_key)) -> dict:
+def create_research_brief(payload: ResearchBriefIn, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
     try:
         return build_research_brief(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -881,7 +883,7 @@ def create_agentic_research_brief(
 
 @app.post("/research-briefs/docx")
 def create_research_brief_docx(
-    payload: ResearchBriefIn, background: BackgroundTasks, _auth: None = Depends(require_api_key)
+    payload: ResearchBriefIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
 ) -> FileResponse:
     try:
         brief = build_research_brief(payload.to_agent_request())
@@ -891,7 +893,9 @@ def create_research_brief_docx(
 
 
 @app.post("/research-briefs/bibtex")
-def create_research_bibtex(payload: ResearchBriefIn, _auth: None = Depends(require_api_key)) -> PlainTextResponse:
+def create_research_bibtex(
+    payload: ResearchBriefIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> PlainTextResponse:
     try:
         brief = build_research_brief(payload.to_agent_request())
     except ValueError as error:
@@ -1259,7 +1263,9 @@ def execute_task(
 
 
 @app.post("/tasks/{task_id}/cross-agent-autoeval")
-def create_cross_agent_autoeval(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
+def create_cross_agent_autoeval(
+    task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
     """Create one review-only quality consolidation for completed local drafts."""
     try:
         return core.create_cross_agent_autoeval(task_id)
