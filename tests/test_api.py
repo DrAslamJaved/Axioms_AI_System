@@ -1,6 +1,8 @@
+import asyncio
+from io import BytesIO
 from pathlib import Path
 
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, UploadFile
 
 from axioms import api
 from axioms import core as core_module
@@ -61,6 +63,7 @@ from axioms.api import (
     discover_semantic_scholar_papers,
     dispatch_approved_task,
     get_task_lineage,
+    ingest_document,
     list_agents,
     list_personal_kb_entries,
     list_tasks,
@@ -73,6 +76,7 @@ from axioms.api import (
     system_readiness,
 )
 from axioms.core import AxiomsCore
+from axioms.document_ingestion import DocumentStore
 from axioms.llm import FakeProvider
 from axioms.models import AgentName, ApprovalDecision, TaskRequest, TaskStatus
 from axioms.store import TaskStore
@@ -97,6 +101,15 @@ def test_lecture_plan_handler_returns_duration_accurate_plan() -> None:
     body = create_lecture_plan(lecture_payload())
     assert sum(section["minutes"] for section in body["sections"]) == 75
     assert body["request"]["topic"] == "Spectral Graph Theory"
+
+
+def test_document_ingestion_handler_returns_metadata_without_exposing_text(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(api, "document_store", DocumentStore(tmp_path / "documents.sqlite3"))
+    uploaded = UploadFile(filename="reference.txt", file=BytesIO(b"Approved research context"))
+    payload = asyncio.run(ingest_document(uploaded, confirmed_non_sensitive=True))
+    assert payload["filename"] == "reference.txt"
+    assert payload["char_count"] == len("Approved research context")
+    assert "content" not in payload
 
 
 def test_cancel_handler_stops_an_approved_task(tmp_path: Path, monkeypatch) -> None:

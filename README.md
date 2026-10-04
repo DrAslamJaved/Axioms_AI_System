@@ -99,6 +99,10 @@ real tool use and optional LLM synthesis:
   synthesis. Urdu script is validated before a generated note is accepted; a
   malformed result falls back to the deterministic review plan. Every
   translation remains subject to human subject-matter review before publication.
+- **Reference-document ingestion** accepts explicitly confirmed non-sensitive
+  PDF, DOCX, and UTF-8 text files into local storage with size and extraction
+  limits. It returns metadata only: ingestion never attaches text to an agent
+  or sends it to an external provider.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.
@@ -269,6 +273,13 @@ curl -X POST http://127.0.0.1:8000/research/discover \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
   -d '{"query":"fuzzy similarity methods for drug-target interaction prediction", "max_results":5}'
+
+# Ingest a non-sensitive local reference document. This stores extracted text
+# locally but does not expose it or attach it to any task or LLM.
+curl -X POST http://127.0.0.1:8000/documents \
+  -H "X-API-Key: your-secret" \
+  -F "document=@approved_reference.pdf" \
+  -F "confirmed_non_sensitive=true"
 ```
 
 Use `GET /tasks/{task_id}` to inspect the plan, lifecycle state, drafts, and agent trace.
