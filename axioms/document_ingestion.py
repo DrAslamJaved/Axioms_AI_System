@@ -189,3 +189,16 @@ class DocumentStore:
                 "SELECT content FROM ingested_documents WHERE document_id = ?", (document_id,)
             ).fetchone()
         return str(row[0]) if row else None
+
+    def delete(self, document_id: str) -> bool:
+        """Permanently remove one locally stored document, including its extracted text.
+
+        Task attachment records are immutable metadata snapshots and remain in
+        their task audit trail.  They contain no extracted document text, so a
+        deletion request removes the only stored copy of the document content.
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM ingested_documents WHERE document_id = ?", (document_id,)
+            )
+        return cursor.rowcount == 1
