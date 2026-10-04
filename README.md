@@ -119,11 +119,12 @@ real tool use and optional LLM synthesis:
   individual jobs, poll, reclaim work, execute tasks, or send telemetry.
 - **FastAPI** exposes the service; **Streamlit** provides a review console,
   including explicit manual operations, task-status, approver-only agent-trace,
-  task-work-queue, and provider-usage inspectors. They perform no automatic
-  polling, task execution, or content display; the operations view is
-  aggregate-only, the trace excludes stored summaries and all task content,
-  work-queue pagination is explicitly user-triggered and locally revisitable,
-  and the usage summary is aggregate-only with no cost or billing data.
+  revision-lineage, task-work-queue, and provider-usage inspectors. They
+  perform no automatic polling, task execution, or content display; the
+  operations view is aggregate-only, the trace and lineage exclude all task
+  content, work-queue pagination is explicitly user-triggered and locally
+  revisitable, and the usage summary is aggregate-only with no cost or billing
+  data.
 
 Every external or public-facing deliverable is held for explicit human approval.
 HIGH-risk tasks (sensitive educational data) are **blocking** — they require the
