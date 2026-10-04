@@ -2,11 +2,22 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -22,6 +33,7 @@ from axioms.assessment_agent import (
     export_student_docx,
 )
 from axioms.assessment_agent_ai import run_agentic_assessment_design
+from axioms.audit_log import bind_request_id, log_event, reset_request_id, select_request_id
 from axioms.autoeval_agent import (
     AutoEvalRequest,
     EvaluatedAgent,
@@ -106,6 +118,37 @@ DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 ROLE_DEPENDENCY = Depends(resolve_role)
 DOCUMENT_FILE = File(...)
 DOCUMENT_NON_SENSITIVE_CONFIRMATION = Form(...)
+
+
+@app.middleware("http")
+async def correlate_and_audit_request(request: Request, call_next):
+    """Add a safe correlation ID and emit metadata-only local request audit events."""
+    request_id = select_request_id(request.headers.get("X-Request-ID"))
+    token = bind_request_id(request_id)
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        log_event(
+            "http_request_failed",
+            method=request.method,
+            path=request.url.path,
+            status_code=500,
+            duration_ms=round((time.perf_counter() - started) * 1_000),
+        )
+        raise
+    else:
+        response.headers["X-Request-ID"] = request_id
+        log_event(
+            "http_request_completed",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round((time.perf_counter() - started) * 1_000),
+        )
+        return response
+    finally:
+        reset_request_id(token)
 
 
 def _crossref_client() -> CrossrefClient:
@@ -564,11 +607,18 @@ def attach_reference_document(
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     try:
-        return core.attach_reference_document(
+        result = core.attach_reference_document(
             task_id,
             document.to_dict(),
             attached_by=principal or payload.attached_by,
         )
+        log_event(
+            "reference_document_attached",
+            task_id=task_id,
+            document_id=document.document_id,
+            principal=principal or payload.attached_by,
+        )
+        return result
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
     except (TaskStateError, ValueError) as error:
@@ -1110,7 +1160,9 @@ def execute_task(
 ) -> dict:
     """Run approved local drafts; ``parallel=true`` is opt-in for independent graph layers only."""
     try:
-        return core.execute(task_id, parallel=parallel)
+        result = core.execute(task_id, parallel=parallel)
+        log_event("task_execution_completed", task_id=task_id, status=result["status"])
+        return result
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
     except TaskStateError as error:
@@ -1199,13 +1251,23 @@ def approval(
     if payload.override_blocking:
         ensure_role(role, AccessRole.ADMIN)
     try:
-        return core.decide(
+        result = core.decide(
             task_id,
             payload.decision,
             payload.note,
             approved_by=approver,
             override_blocking=payload.override_blocking,
         )
+        log_event(
+            "task_approval_recorded",
+            task_id=task_id,
+            principal=approver,
+            risk_tier=result["risk_tier"],
+            decision=payload.decision.value,
+            override_blocking=payload.override_blocking,
+            status=result["status"],
+        )
+        return result
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Task not found") from error
     except BlockedApprovalError as error:
