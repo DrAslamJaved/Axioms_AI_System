@@ -548,7 +548,8 @@ def health() -> dict[str, str]:
 
 
 @app.get("/agents")
-def list_agents() -> list[dict]:
+def list_agents(_auth: None = Depends(require_api_key)) -> list[dict]:
+    """Return the local specialist registry only to an authenticated caller."""
     return [profile.to_dict() for profile in specialist_profiles()]
 
 
