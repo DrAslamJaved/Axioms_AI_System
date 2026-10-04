@@ -111,7 +111,8 @@ real tool use and optional LLM synthesis:
   become verified facts or override evidence, privacy, safety, or approval gates.
   Approved preference values, searchable episodic-memory summaries, and memory
   lifecycle audits are content-bearing reviewer views, available only to an
-  `approver` or `admin` in named-key deployments.
+  `approver` or `admin` in named-key deployments. Creating feedback, Personal
+  KB, or episodic-memory proposals also requires an `approver` or `admin` key.
 - **Urdu and bilingual content notes** are available only through bounded LLM
   synthesis. Urdu script is validated before a generated note is accepted; a
   malformed result falls back to the deterministic review plan. Every
@@ -205,7 +206,8 @@ Copy `.env.example` and set the values appropriate to your deployment:
 
 In named-key mode, `viewer` keys can inspect authenticated work-queue metadata but cannot make
 approval, revision, recovery, memory-governance, dispatch, or local-execution
-decisions or initiate external research discovery. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
+decisions; create durable knowledge proposals; or initiate external research
+discovery. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
 HIGH-risk data-governance override. Existing single-key and legacy named-key
 deployments retain their prior administrator-equivalent behaviour.
 
@@ -391,8 +393,11 @@ cloud deployment).
 
 `POST /feedback` records per-delivery feedback. `POST /personal-kb/proposals`
 creates a pending preference proposal; `POST /personal-kb/proposals/{proposal_id}/decision`
-records approval or rejection. Only approved proposals appear in `GET /personal-kb/entries`.
-Student and personal identifiers are rejected from KB records.
+records approval or rejection. `POST /tasks/{task_id}/memory-proposal` creates
+a pending episodic-memory proposal. In named-key deployments, all of these
+durable knowledge writes require an `approver` or `admin` key. Only approved
+proposals appear in `GET /personal-kb/entries`. Student and personal identifiers
+are rejected from KB records.
 
 ## Deployment
 
