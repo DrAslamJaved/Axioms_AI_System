@@ -224,9 +224,9 @@ deployments retain their prior administrator-equivalent behaviour.
 When `AXIOMS_LLM_PROVIDER` is `anthropic` or `openai`, an authorized generation
 request must explicitly include `X-Axioms-Allow-External-Provider: true`. This
 per-request confirmation is not needed for the default disabled provider or its
-local deterministic fallbacks. Its acceptance is recorded as a correlated,
-metadata-only local audit event containing the configured provider name; prompts,
-generated content, and credentials are never logged.
+local deterministic fallbacks. Its acceptance or omission is recorded as a
+correlated, metadata-only local audit event containing the configured provider
+name; prompts, generated content, headers, and credentials are never logged.
 
 To enable LLM-powered synthesis in the agentic research agent, install the
 optional dependencies: `pip install -e ".[agentic]"`.
