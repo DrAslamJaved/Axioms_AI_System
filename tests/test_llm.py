@@ -1,11 +1,16 @@
+import sys
+from types import SimpleNamespace
+
 import pytest
 
 from axioms.llm import (
+    AnthropicProvider,
     DisabledProvider,
     FakeProvider,
     LLMConfigurationError,
     LLMDisabledError,
     LLMMessage,
+    OpenAIProvider,
     get_provider,
 )
 
@@ -21,6 +26,39 @@ def test_fake_provider_returns_responder_output() -> None:
     result = provider.complete([LLMMessage("user", "ping")])
     assert result.text == "echo:ping"
     assert result.provider == "fake"
+    assert result.input_tokens == 0
+    assert result.output_tokens == 0
+
+
+def test_anthropic_provider_preserves_provider_reported_token_counts(monkeypatch) -> None:
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="Complete")],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(input_tokens=21, output_tokens=13),
+    )
+
+    class FakeAnthropic:
+        def __init__(self, *, api_key: str) -> None:
+            self.messages = SimpleNamespace(create=lambda **_kwargs: response)
+
+    monkeypatch.setitem(sys.modules, "anthropic", SimpleNamespace(Anthropic=FakeAnthropic))
+    result = AnthropicProvider("test-key").complete([LLMMessage("user", "hello")])
+    assert (result.input_tokens, result.output_tokens) == (21, 13)
+
+
+def test_openai_provider_preserves_provider_reported_token_counts(monkeypatch) -> None:
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="Complete"), finish_reason="stop")],
+        usage=SimpleNamespace(prompt_tokens=34, completion_tokens=8),
+    )
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key: str) -> None:
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    result = OpenAIProvider("test-key").complete([LLMMessage("user", "hello")])
+    assert (result.input_tokens, result.output_tokens) == (34, 8)
 
 
 def test_get_provider_defaults_to_disabled() -> None:
