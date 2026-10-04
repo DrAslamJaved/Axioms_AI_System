@@ -8,6 +8,8 @@ from pathlib import Path
 
 from docx import Document
 
+from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider, get_provider
+
 
 class ContentFormat(StrEnum):
     YOUTUBE_VIDEO = "youtube_video"
@@ -122,8 +124,10 @@ def _allocate_minutes(total: int) -> tuple[int, ...]:
     return tuple(allocation)
 
 
-def build_content_package(request: ContentRequest) -> ContentPackage:
-    """Create a content blueprint without presenting generated prose as verified instruction."""
+def build_content_package(
+    request: ContentRequest, *, provider: LLMProvider | None = None
+) -> ContentPackage:
+    """Create a review-first content blueprint with bounded internal planning synthesis."""
     request.validate()
     minutes = _allocate_minutes(request.duration_minutes)
     application = request.application_context or "an instructor-approved real-world application"
@@ -149,6 +153,7 @@ def build_content_package(request: ContentRequest) -> ContentPackage:
         ContentSegment("Worked application", minutes[3], "Model a complete, reviewable example or demonstration.", "Show intermediate reasoning and state any limitations or edge cases."),
         ContentSegment("Recap and next step", minutes[4], "Consolidate learning and prompt active follow-up.", f"{language_note} End with a practice prompt rather than an unverified promise."),
     )
+    segments = _synthesise_speaker_notes(request, segments, provider or get_provider())
     thumbnail = (
         f"Use a clear visual of the central concept in {request.topic}, a short accurate headline, strong contrast, "
         "and no numerical performance, credential, or outcome claim unless verified by the author. Include alt-text intent."
@@ -174,6 +179,87 @@ def build_content_package(request: ContentRequest) -> ContentPackage:
         accessibility_checks=accessibility,
         accuracy_checks=accuracy,
     )
+
+
+
+_CONTENT_SYSTEM_PROMPT = """You are the Axioms internal content-planning assistant.
+Improve only the speaker notes for the supplied deterministic content-plan
+segments. These are internal editorial notes, not a final script, publication
+copy, title, description, social post, factual lesson material, or publishing
+plan. Preserve every segment title, duration, purpose, approved source scope,
+learning outcome, language-review requirement, accessibility check, and human
+publication-approval boundary. Do not invent claims, examples, citations,
+sources, permissions, learner outcomes, or platform performance.
+
+Return exactly one concise planning paragraph per supplied segment, in its
+original order, separated by a line containing only `---`. Do not use headings,
+lists, citations, links, or questions.
+"""
+
+
+def _synthesise_speaker_notes(
+    request: ContentRequest,
+    segments: tuple[ContentSegment, ...],
+    provider: LLMProvider,
+) -> tuple[ContentSegment, ...]:
+    """Accept only bounded internal notes; provider failures retain the deterministic plan."""
+    outcomes = "\n".join(f"- {outcome}" for outcome in request.learning_outcomes)
+    segment_specification = "\n".join(
+        (
+            f"{index}. {segment.title}; {segment.minutes} minutes; "
+            f"purpose: {segment.purpose}; current note: {segment.speaker_notes}"
+        )
+        for index, segment in enumerate(segments, start=1)
+    )
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Format: {request.format.value}\n"
+        f"Audience: {request.audience}\n"
+        f"Language mode: {request.language_mode.value}\n"
+        f"Approved source scope: {request.approved_source_scope}\n"
+        f"Learning outcomes:\n{outcomes}\n\n"
+        f"Content-plan segments:\n{segment_specification}\n"
+    )
+    try:
+        result = provider.complete(
+            [LLMMessage("system", _CONTENT_SYSTEM_PROMPT), LLMMessage("user", user_prompt)],
+            max_tokens=1_200,
+            temperature=0.2,
+        )
+    except LLMDisabledError:
+        return segments
+    except Exception:  # noqa: BLE001 - failed synthesis must not weaken review-first planning
+        return segments
+    generated = _parse_speaker_notes(result.text, len(segments))
+    if generated is None:
+        return segments
+    return tuple(
+        ContentSegment(
+            title=segment.title,
+            minutes=segment.minutes,
+            purpose=segment.purpose,
+            speaker_notes=speaker_notes,
+        )
+        for segment, speaker_notes in zip(segments, generated, strict=True)
+    )
+
+
+def _parse_speaker_notes(text: str, expected_segments: int) -> tuple[str, ...] | None:
+    """Reject malformed, list-like, link-like, or question-like output before it alters the plan."""
+    blocks = [block.strip() for block in text.split("---") if block.strip()]
+    if len(blocks) != expected_segments:
+        return None
+    if any(
+        "\n" in block
+        or "?" in block
+        or "http://" in block.casefold()
+        or "https://" in block.casefold()
+        or block.startswith(("-", "*", "#"))
+        or len(block) > 1_500
+        for block in blocks
+    ):
+        return None
+    return tuple(blocks)
 
 
 def export_docx(package: ContentPackage, destination: Path) -> Path:
