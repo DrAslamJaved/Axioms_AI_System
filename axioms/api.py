@@ -156,6 +156,11 @@ class TaskIn(BaseModel):
     external_delivery: bool = False
 
 
+class ReferenceDocumentAttachmentIn(BaseModel):
+    document_id: str = Field(min_length=5, max_length=100)
+    attached_by: str = Field(min_length=2, max_length=200)
+
+
 class ApprovalIn(BaseModel):
     decision: ApprovalDecision
     approved_by: str = Field(min_length=2, max_length=200)
@@ -545,6 +550,29 @@ def get_document_metadata(document_id: str, _auth: None = Depends(require_api_ke
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return document.to_dict()
+
+
+@app.post("/tasks/{task_id}/reference-documents")
+def attach_reference_document(
+    task_id: str,
+    payload: ReferenceDocumentAttachmentIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    """Attach one pre-ingested document's metadata to a task before execution approval."""
+    document = document_store.get_metadata(payload.document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        return core.attach_reference_document(
+            task_id,
+            document.to_dict(),
+            attached_by=principal or payload.attached_by,
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Task not found") from error
+    except (TaskStateError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.post("/feedback")
