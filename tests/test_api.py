@@ -730,6 +730,8 @@ def test_operations_summary_handler_exposes_read_only_aggregate_health(tmp_path:
     assert summary["tasks"][TaskStatus.PENDING_APPROVAL.value] == 1
     assert summary["dispatch"]["status_counts"]["queued"] == 0
     assert not summary["external_actions_enabled"]
+    assert set(summary) == {"tasks", "dispatch", "external_actions_enabled", "human_review_required"}
+    assert "jobs" not in summary
 
 
 def test_task_list_handler_filters_a_read_only_human_work_queue(tmp_path: Path, monkeypatch) -> None:
