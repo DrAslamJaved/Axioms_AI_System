@@ -115,8 +115,9 @@ real tool use and optional LLM synthesis:
   allowlisted lifecycle metadata only. Request bodies, task goals, draft text,
   and document text are deliberately excluded from the log payload.
 - **FastAPI** exposes the service; **Streamlit** provides a review console,
-  including an explicit manual task-status inspector. The inspector performs no
-  automatic polling, task execution, or content display.
+  including explicit manual task-status, task-work-queue, and provider-usage
+  inspectors. They perform no automatic polling, task execution, or content
+  display; the usage summary is aggregate-only and has no cost or billing data.
 
 Every external or public-facing deliverable is held for explicit human approval.
 HIGH-risk tasks (sensitive educational data) are **blocking** — they require the
