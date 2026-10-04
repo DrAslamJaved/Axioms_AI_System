@@ -7,6 +7,8 @@ from enum import StrEnum
 from pathlib import Path
 
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider, get_provider
 
@@ -131,11 +133,7 @@ def build_content_package(
     request.validate()
     minutes = _allocate_minutes(request.duration_minutes)
     application = request.application_context or "an instructor-approved real-world application"
-    language_note = (
-        "Mark each segment for English and Urdu review; translate technical terms only after subject-matter review."
-        if request.language_mode is LanguageMode.BILINGUAL
-        else f"Use {request.language_mode.value} with consistent, accessible terminology."
-    )
+    language_note = _language_review_note(request.language_mode)
     title_options = (
         f"{request.topic}: Intuition, Method, and Application",
         f"Understanding {request.topic} Through a Worked Example",
@@ -218,6 +216,7 @@ def _synthesise_speaker_notes(
         f"Language mode: {request.language_mode.value}\n"
         f"Approved source scope: {request.approved_source_scope}\n"
         f"Learning outcomes:\n{outcomes}\n\n"
+        f"{_language_generation_instruction(request.language_mode)}\n\n"
         f"Content-plan segments:\n{segment_specification}\n"
     )
     try:
@@ -230,7 +229,7 @@ def _synthesise_speaker_notes(
         return segments
     except Exception:  # noqa: BLE001 - failed synthesis must not weaken review-first planning
         return segments
-    generated = _parse_speaker_notes(result.text, len(segments))
+    generated = _parse_speaker_notes(result.text, len(segments), request.language_mode)
     if generated is None:
         return segments
     return tuple(
@@ -244,7 +243,38 @@ def _synthesise_speaker_notes(
     )
 
 
-def _parse_speaker_notes(text: str, expected_segments: int) -> tuple[str, ...] | None:
+def _language_review_note(language_mode: LanguageMode) -> str:
+    if language_mode is LanguageMode.BILINGUAL:
+        return (
+            "For an enabled LLM, draft each internal note in English followed by Urdu; "
+            "Urdu review is required for every translation and technical term before publication."
+        )
+    if language_mode is LanguageMode.URDU:
+        return (
+            "For an enabled LLM, draft internal notes in Urdu script; a subject-matter reviewer "
+            "must verify every translation and technical term before publication."
+        )
+    return "Use English with consistent, accessible terminology."
+
+
+def _language_generation_instruction(language_mode: LanguageMode) -> str:
+    if language_mode is LanguageMode.BILINGUAL:
+        return (
+            "Language output contract: write each supplied planning paragraph first in English, then "
+            "write a faithful Urdu-script draft after the exact separator ` || اردو: `. Do not add "
+            "new claims, examples, or translation assurances."
+        )
+    if language_mode is LanguageMode.URDU:
+        return (
+            "Language output contract: write every supplied planning paragraph in Urdu script. Do not "
+            "add new claims, examples, or translation assurances."
+        )
+    return "Language output contract: write every supplied planning paragraph in English."
+
+
+def _parse_speaker_notes(
+    text: str, expected_segments: int, language_mode: LanguageMode
+) -> tuple[str, ...] | None:
     """Reject malformed, list-like, link-like, or question-like output before it alters the plan."""
     blocks = [block.strip() for block in text.split("---") if block.strip()]
     if len(blocks) != expected_segments:
@@ -259,9 +289,38 @@ def _parse_speaker_notes(text: str, expected_segments: int) -> tuple[str, ...] |
         for block in blocks
     ):
         return None
+    if not all(_matches_language_contract(block, language_mode) for block in blocks):
+        return None
     return tuple(blocks)
 
 
+def _matches_language_contract(text: str, language_mode: LanguageMode) -> bool:
+    """Accept Urdu only when its script is actually present; malformed generation falls back safely."""
+    if language_mode is LanguageMode.ENGLISH:
+        return True
+    if language_mode is LanguageMode.URDU:
+        return _urdu_character_count(text) >= 8
+    english, separator, urdu = text.partition(" || اردو: ")
+    return bool(separator and english.strip() and _urdu_character_count(urdu) >= 8)
+
+
+def _urdu_character_count(text: str) -> int:
+    return sum("\u0600" <= character <= "\u06ff" for character in text)
+
+
+def _set_urdu_layout(paragraph) -> None:
+    """Mark Urdu-containing DOCX paragraphs right-to-left with a broadly available fallback font."""
+    paragraph_properties = paragraph._p.get_or_add_pPr()
+    bidi = OxmlElement("w:bidi")
+    bidi.set(qn("w:val"), "1")
+    paragraph_properties.append(bidi)
+    for run in paragraph.runs:
+        run_properties = run._element.get_or_add_rPr()
+        fonts = OxmlElement("w:rFonts")
+        fonts.set(qn("w:ascii"), "Noto Nastaliq Urdu")
+        fonts.set(qn("w:hAnsi"), "Noto Nastaliq Urdu")
+        fonts.set(qn("w:cs"), "Noto Nastaliq Urdu")
+        run_properties.append(fonts)
 def export_docx(package: ContentPackage, destination: Path) -> Path:
     """Export a reviewable content plan; this function does not publish any content."""
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -275,14 +334,20 @@ def export_docx(package: ContentPackage, destination: Path) -> Path:
     document.add_heading("Description framework", level=1)
     document.add_paragraph(package.description_framework)
     document.add_heading("Script or module plan", level=1)
-    table = document.add_table(rows=1, cols=3)
-    for cell, heading in zip(table.rows[0].cells, ("Minutes", "Segment", "Purpose"), strict=True):
+    table = document.add_table(rows=1, cols=4)
+    for cell, heading in zip(
+        table.rows[0].cells, ("Minutes", "Segment", "Purpose", "Speaker notes"), strict=True
+    ):
         cell.text = heading
     for segment in package.segments:
         cells = table.add_row().cells
         cells[0].text = str(segment.minutes)
         cells[1].text = segment.title
         cells[2].text = segment.purpose
+        cells[3].text = segment.speaker_notes
+        for paragraph in cells[3].paragraphs:
+            if _urdu_character_count(paragraph.text):
+                _set_urdu_layout(paragraph)
     document.add_heading("Thumbnail brief", level=1)
     document.add_paragraph(package.thumbnail_brief)
     document.add_heading("Accessibility checks", level=1)
@@ -293,4 +358,3 @@ def export_docx(package: ContentPackage, destination: Path) -> Path:
         document.add_paragraph(item, style="List Bullet")
     document.save(destination)
     return destination
-
