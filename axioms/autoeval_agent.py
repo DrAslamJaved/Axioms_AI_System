@@ -9,6 +9,8 @@ from pathlib import Path
 
 from docx import Document
 
+from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider
+
 
 class EvaluatedAgent(StrEnum):
     LECTURE = "lecture_design"
@@ -65,6 +67,7 @@ class AutoEvalReport:
     missing_required_elements: tuple[str, ...]
     quality_signal_percent: int
     review_boundary: str
+    qualitative_summary: str | None = None
     human_review_required: bool = True
     automatic_reconfiguration_blocked: bool = True
     external_action_blocked: bool = True
@@ -98,6 +101,9 @@ class AutoEvalReport:
 
 ## Review boundary
 {self.review_boundary}
+
+## Optional qualitative summary
+{self.qualitative_summary or "No provider-generated qualitative summary is available; use the deterministic checks above."}
 """
 
 
@@ -105,7 +111,71 @@ def _contains(text: str, item: str) -> bool:
     return item.casefold() in text.casefold()
 
 
-def evaluate_deliverable(request: AutoEvalRequest) -> AutoEvalReport:
+_AUTOEVAL_SYSTEM_PROMPT = """You are the Axioms internal AutoEval summariser.
+Write only one concise qualitative summary of the supplied deterministic check
+results. The deterministic SHA-256, statuses, required-marker results, score,
+and review boundary are authoritative; you may not modify, reinterpret, replace,
+or add to them. Do not claim factual, citation, originality, accessibility,
+pedagogical, legal, privacy, or release verification. Do not approve, reject,
+reconfigure, publish, schedule, message, or authorize anything. This is a
+non-authoritative review note for a human reviewer.
+
+Return one paragraph only, with no heading, list, citation, link, or question.
+"""
+
+
+def _synthesise_qualitative_summary(
+    request: AutoEvalRequest,
+    checks: tuple[EvaluationCheck, ...],
+    found: tuple[str, ...],
+    missing: tuple[str, ...],
+    quality_signal: int,
+    review_boundary: str,
+    provider: LLMProvider | None,
+) -> str | None:
+    """Keep deterministic evaluation authoritative; use a provider only for a bounded human-review note."""
+    if provider is None:
+        return None
+    check_results = "\n".join(
+        f"- {check.name}: {check.status.value}; {check.detail}" for check in checks
+    )
+    user_prompt = (
+        f"Evaluated agent: {request.evaluated_agent.value}\n"
+        f"Deliverable title: {request.deliverable_title}\n"
+        f"Artifact SHA-256: {sha256(request.artifact_text.encode('utf-8')).hexdigest()}\n"
+        f"Quality signal: {quality_signal}%\n"
+        f"Required elements found: {', '.join(found) or 'none'}\n"
+        f"Required elements missing: {', '.join(missing) or 'none'}\n\n"
+        f"Deterministic check results:\n{check_results}\n\n"
+        f"Review boundary:\n{review_boundary}\n"
+    )
+    try:
+        result = provider.complete(
+            [LLMMessage("system", _AUTOEVAL_SYSTEM_PROMPT), LLMMessage("user", user_prompt)],
+            max_tokens=500,
+            temperature=0.0,
+        )
+    except LLMDisabledError:
+        return None
+    except Exception:  # noqa: BLE001 - provider failures must never alter deterministic QA
+        return None
+    summary = result.text.strip()
+    if (
+        not summary
+        or "\n" in summary
+        or "?" in summary
+        or "http://" in summary.casefold()
+        or "https://" in summary.casefold()
+        or summary.startswith(("-", "*", "#"))
+        or len(summary) > 1_500
+    ):
+        return None
+    return summary
+
+
+def evaluate_deliverable(
+    request: AutoEvalRequest, *, provider: LLMProvider | None = None
+) -> AutoEvalReport:
     """Run lexical contract checks only; never claim semantic, factual, or pedagogical verification."""
     request.validate()
     found = tuple(item for item in request.required_elements if _contains(request.artifact_text, item))
@@ -186,14 +256,25 @@ def evaluate_deliverable(request: AutoEvalRequest) -> AutoEvalReport:
         "or suitability for release. Scores are review signals and never trigger automatic approval, "
         "agent reconfiguration, publication, scheduling, or external action."
     )
+    deterministic_checks = tuple(checks)
+    qualitative_summary = _synthesise_qualitative_summary(
+        request,
+        deterministic_checks,
+        found,
+        missing,
+        quality_signal,
+        boundary,
+        provider,
+    )
     return AutoEvalReport(
         request=request,
         artifact_sha256=sha256(request.artifact_text.encode("utf-8")).hexdigest(),
-        checks=tuple(checks),
+        checks=deterministic_checks,
         required_elements_found=found,
         missing_required_elements=missing,
         quality_signal_percent=quality_signal,
         review_boundary=boundary,
+        qualitative_summary=qualitative_summary,
     )
 
 
@@ -216,5 +297,10 @@ def export_docx(report: AutoEvalReport, destination: Path) -> Path:
         cells[2].text = item.detail
     document.add_heading("Review boundary", level=1)
     document.add_paragraph(report.review_boundary)
+    document.add_heading("Optional qualitative summary", level=1)
+    document.add_paragraph(
+        report.qualitative_summary
+        or "No provider-generated qualitative summary is available; use the deterministic checks above."
+    )
     document.save(destination)
     return destination

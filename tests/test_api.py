@@ -73,6 +73,7 @@ from axioms.api import (
     system_readiness,
 )
 from axioms.core import AxiomsCore
+from axioms.llm import FakeProvider
 from axioms.models import ApprovalDecision, TaskRequest, TaskStatus
 from axioms.store import TaskStore
 from axioms.tools import ArxivClient, SemanticScholarClient, TavilyClient
@@ -563,6 +564,21 @@ def autoeval_payload() -> AutoEvalReportIn:
 
 def test_autoeval_handler_returns_review_signal_without_release_approval() -> None:
     body = create_autoeval_report(autoeval_payload())
+    assert body["human_review_required"]
+    assert body["automatic_reconfiguration_blocked"]
+
+
+
+def test_autoeval_handler_uses_provider_only_for_a_qualitative_summary(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api,
+        "get_provider",
+        lambda: FakeProvider(
+            lambda _messages: "The deterministic checks remain the only basis for human review decisions."
+        ),
+    )
+    body = create_autoeval_report(autoeval_payload())
+    assert body["qualitative_summary"] is not None
     assert body["human_review_required"]
     assert body["automatic_reconfiguration_blocked"]
 
