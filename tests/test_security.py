@@ -75,6 +75,27 @@ def test_accepted_external_provider_consent_is_audited_without_request_content(m
     }
 
 
+
+def test_missing_external_provider_consent_is_audited_without_request_content(monkeypatch, caplog) -> None:
+    monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "openai")
+    caplog.set_level(logging.INFO, logger=LOGGER.name)
+    token = bind_request_id("consent-block_2026")
+    try:
+        with pytest.raises(HTTPException, match="External LLM use requires") as excinfo:
+            require_external_provider_consent(None)
+    finally:
+        reset_request_id(token)
+
+    assert excinfo.value.status_code == 428
+    payload = json.loads(caplog.records[-1].message)
+    assert payload == {
+        "event": "external_provider_consent_missing",
+        "provider": "openai",
+        "request_id": "consent-block_2026",
+        "timestamp": payload["timestamp"],
+    }
+
+
 def test_wrong_key_is_rejected(monkeypatch) -> None:
     monkeypatch.setenv("AXIOMS_API_KEY", "s3cret")
     monkeypatch.delenv("AXIOMS_API_KEYS", raising=False)
