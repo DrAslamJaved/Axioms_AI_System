@@ -92,7 +92,8 @@ real tool use and optional LLM synthesis:
   bounded synthesis when a provider is configured; malformed, disabled, or
   failed responses retain their fixed, review-first templates. AutoEval keeps
   deterministic checks authoritative and limits provider use to an optional
-  qualitative summary.
+  qualitative summary. In named-key deployments, every optional-LLM generation
+  route requires an `approver` or `admin` key.
 - **Provider-reported token metadata** preserves input and output token counts
   on each LLM completion when a configured provider supplies them. Counts are
   not cost estimates, are zero for offline or unavailable usage data, and are
@@ -207,7 +208,7 @@ Copy `.env.example` and set the values appropriate to your deployment:
 In named-key mode, `viewer` keys can inspect authenticated work-queue metadata but cannot make
 approval, revision, recovery, memory-governance, dispatch, or local-execution
 decisions; create durable knowledge proposals; or initiate external research
-discovery. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
+discovery or LLM-capable generation. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
 HIGH-risk data-governance override. Existing single-key and legacy named-key
 deployments retain their prior administrator-equivalent behaviour.
 
@@ -373,6 +374,11 @@ location suitable for the institution's data-retention policy.
 | Social Media | `POST /social-media-packages`; `POST /social-media-packages/agentic` | `POST /social-media-packages/docx`; internal editorial review |
 | STEM AI Portfolio | `POST /portfolio-packages`; `POST /portfolio-packages/agentic` | `POST /portfolio-packages/docx`; internal readiness review |
 | AutoEval | `POST /autoeval-reports` | `POST /autoeval-reports/docx` |
+
+In named-key deployments, all Specialist Agent, agentic-review, and AutoEval
+generation routes in this table require an `approver` or `admin` key because a
+configured provider may receive the submitted material. The default provider is
+disabled; this authorization boundary also applies when the local fallback is used.
 | Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
 | Task revision | `POST /tasks/{task_id}/revise` after final rejection | Creates a linked new task; fresh approval remains required |
 | Task work queue | `GET /tasks` | Authenticated metadata projection only; excludes goals, drafts, preferences, documents, and reviewer notes |
