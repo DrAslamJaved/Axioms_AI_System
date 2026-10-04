@@ -41,7 +41,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent(
             "LLM provider seam",
             IntegrationState.IMPLEMENTED,
-            "Pluggable Anthropic/OpenAI backends with a DisabledProvider safe default; bounded lecture-design, writing, instructor-facing assessment, internal content-plan, internal social-asset, and internal portfolio-structure synthesis are wired while AutoEval remains deterministic.",
+            "Pluggable Anthropic/OpenAI backends with a DisabledProvider safe default; all specialist agents use bounded synthesis where configured, while AutoEval keeps deterministic checks authoritative and limits LLM use to an optional qualitative summary.",
         ),
         IntegrationComponent("Crossref DOI verification", IntegrationState.IMPLEMENTED, "Real external metadata verification tool with injectable transport for offline testing."),
         IntegrationComponent("Tavily evidence discovery", IntegrationState.IMPLEMENTED, "Read-only search candidates with provenance and an explicit verification boundary; disabled until configured."),

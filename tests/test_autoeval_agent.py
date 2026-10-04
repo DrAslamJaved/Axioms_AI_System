@@ -9,6 +9,7 @@ from axioms.autoeval_agent import (
     evaluate_deliverable,
     export_docx,
 )
+from axioms.llm import DisabledProvider, FakeProvider, LLMMessage
 
 
 def request() -> AutoEvalRequest:
@@ -29,6 +30,54 @@ def test_autoeval_records_deterministic_contract_checks_without_approval() -> No
     assert report.automatic_reconfiguration_blocked
     assert report.external_action_blocked
     assert report.checks[-1].status is CheckStatus.REVIEW
+
+
+
+def test_disabled_llm_retains_deterministic_autoeval_results() -> None:
+    baseline = evaluate_deliverable(request())
+    report = evaluate_deliverable(request(), provider=DisabledProvider())
+    assert report == baseline
+    assert report.qualitative_summary is None
+
+
+def test_fake_llm_adds_non_authoritative_qualitative_summary_only() -> None:
+    captured: dict[str, list[LLMMessage]] = {}
+
+    def responder(messages: list[LLMMessage]) -> str:
+        captured["messages"] = messages
+        return "The deterministic marker checks require human review before any decision or external action."
+
+    baseline = evaluate_deliverable(request())
+    report = evaluate_deliverable(request(), provider=FakeProvider(responder))
+    assert report.artifact_sha256 == baseline.artifact_sha256
+    assert report.checks == baseline.checks
+    assert report.required_elements_found == baseline.required_elements_found
+    assert report.missing_required_elements == baseline.missing_required_elements
+    assert report.quality_signal_percent == baseline.quality_signal_percent
+    assert report.review_boundary == baseline.review_boundary
+    assert report.human_review_required
+    assert report.automatic_reconfiguration_blocked
+    assert report.external_action_blocked
+    assert report.qualitative_summary is not None
+    prompt = " ".join(message.content for message in captured["messages"])
+    assert "Artifact SHA-256" in prompt
+    assert "The plan includes" not in prompt
+    assert "deterministic SHA-256" in prompt
+
+
+def test_malformed_or_failed_llm_summary_is_omitted_without_changing_checks() -> None:
+    baseline = evaluate_deliverable(request())
+    malformed = evaluate_deliverable(request(), provider=FakeProvider(lambda _messages: "- list output"))
+
+    class BrokenProvider:
+        name = "broken"
+
+        def complete(self, messages, *, max_tokens: int = 1024, temperature: float = 0.2):
+            raise RuntimeError("provider unavailable")
+
+    failed = evaluate_deliverable(request(), provider=BrokenProvider())
+    assert malformed == baseline
+    assert failed == baseline
 
 
 def test_autoeval_identifies_missing_required_marker_and_sensitive_data_block() -> None:
