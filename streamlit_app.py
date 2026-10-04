@@ -172,7 +172,9 @@ with st.expander("Task work queue", expanded=False):
     if queue_submitted:
         response = _get(_task_queue_url(status=queue_status, limit=queue_limit))
         if response.ok:
-            st.session_state["task_work_queue"] = response.json()
+            task_work_queue = response.json()
+            st.session_state["task_work_queue"] = task_work_queue
+            st.session_state["task_work_queue_pages"] = [task_work_queue]
             st.session_state["task_work_queue_filters"] = {
                 "status": queue_status,
                 "limit": queue_limit,
@@ -183,28 +185,56 @@ with st.expander("Task work queue", expanded=False):
             st.error(f"Error {response.status_code}: {response.text}")
     task_work_queue = st.session_state.get("task_work_queue")
     if task_work_queue:
-        if task_work_queue["next_cursor"] and st.button("Load next queue page", key="task-work-queue-next"):
-            queue_filters = st.session_state.get("task_work_queue_filters")
-            if not queue_filters:
-                st.error("Refresh the task work queue before requesting another page.")
+        task_work_queue_pages = st.session_state.get("task_work_queue_pages", [task_work_queue])
+        task_work_queue_page = st.session_state.get("task_work_queue_page", 1)
+        previous_page, next_page = st.columns(2)
+        if previous_page.button(
+            "Show previous queue page",
+            key="task-work-queue-previous",
+            disabled=task_work_queue_page == 1,
+        ):
+            task_work_queue_page -= 1
+            task_work_queue = task_work_queue_pages[task_work_queue_page - 1]
+            st.session_state["task_work_queue"] = task_work_queue
+            st.session_state["task_work_queue_page"] = task_work_queue_page
+        can_show_cached_page = task_work_queue_page < len(task_work_queue_pages)
+        can_request_next_page = task_work_queue["next_cursor"] is not None
+        if next_page.button(
+            "Load next queue page",
+            key="task-work-queue-next",
+            disabled=not can_show_cached_page and not can_request_next_page,
+        ):
+            if can_show_cached_page:
+                task_work_queue_page += 1
+                task_work_queue = task_work_queue_pages[task_work_queue_page - 1]
+                st.session_state["task_work_queue"] = task_work_queue
+                st.session_state["task_work_queue_page"] = task_work_queue_page
             else:
-                response = _get(
-                    _task_queue_url(
-                        status=queue_filters["status"],
-                        limit=queue_filters["limit"],
-                        cursor=task_work_queue["next_cursor"],
-                    )
-                )
-                if response.ok:
-                    task_work_queue = response.json()
-                    st.session_state["task_work_queue"] = task_work_queue
-                    st.session_state["task_work_queue_page"] = (
-                        st.session_state.get("task_work_queue_page", 1) + 1
-                    )
+                queue_filters = st.session_state.get("task_work_queue_filters")
+                if not queue_filters:
+                    st.error("Refresh the task work queue before requesting another page.")
                 else:
-                    st.error(f"Error {response.status_code}: {response.text}")
+                    response = _get(
+                        _task_queue_url(
+                            status=queue_filters["status"],
+                            limit=queue_filters["limit"],
+                            cursor=task_work_queue["next_cursor"],
+                        )
+                    )
+                    if response.ok:
+                        task_work_queue = response.json()
+                        task_work_queue_pages.append(task_work_queue)
+                        task_work_queue_page += 1
+                        st.session_state["task_work_queue"] = task_work_queue
+                        st.session_state["task_work_queue_pages"] = task_work_queue_pages
+                        st.session_state["task_work_queue_page"] = task_work_queue_page
+                    else:
+                        st.error(f"Error {response.status_code}: {response.text}")
         queue_items = task_work_queue["items"]
-        st.caption(f"Page {st.session_state.get('task_work_queue_page', 1)} — loaded only on request.")
+        st.caption(
+            f"Page {task_work_queue_page} of {len(task_work_queue_pages)} viewed locally — "
+            "all navigation is loaded only on request."
+        )
         if queue_items:
             st.dataframe(
                 [
