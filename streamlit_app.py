@@ -106,6 +106,46 @@ with st.expander("Task status inspector", expanded=False):
         else:
             st.caption("No final-review action is available from this inspector.")
 
+# --- Manual agent trace inspector ---
+
+with st.expander("Agent trace inspector (approver)", expanded=False):
+    st.caption(
+        "Manual, review-only lifecycle trace. Named-key deployments require an approver or administrator key; "
+        "events exclude task goals, draft text, document metadata, preference values, reviewer notes, and summaries."
+    )
+    with st.form("agent-trace-inspector"):
+        trace_task_id = st.text_input("Task ID", placeholder="task_…", key="agent-trace-task-id")
+        trace_submitted = st.form_submit_button("Refresh agent trace")
+    if trace_submitted:
+        if not trace_task_id.strip():
+            st.warning("Enter a task ID to inspect its lifecycle trace.")
+        else:
+            response = _get(f"{API_URL}/tasks/{trace_task_id.strip()}/trace")
+            if response.ok:
+                st.session_state["agent_trace"] = response.json()
+            else:
+                st.session_state.pop("agent_trace", None)
+                st.error(f"Error {response.status_code}: {response.text}")
+    agent_trace = st.session_state.get("agent_trace")
+    if agent_trace:
+        trace_columns = st.columns(3)
+        trace_columns[0].metric("Lifecycle", agent_trace["status"])
+        trace_columns[1].metric("Risk tier", agent_trace["risk_tier"] or "unknown")
+        trace_columns[2].metric("Recorded events", len(agent_trace["events"]))
+        st.dataframe(
+            [
+                {
+                    "Recorded at": event["created_at"],
+                    "Event": event["kind"],
+                    "Agent": event["agent"] or "Axioms Core",
+                }
+                for event in agent_trace["events"]
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+        st.caption("This inspector is read-only and provides no approval, execution, scheduling, or release controls.")
+
 # --- Manual provider usage summary ---
 
 with st.expander("Local provider usage summary", expanded=False):
