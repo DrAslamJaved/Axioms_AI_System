@@ -339,3 +339,27 @@ def test_external_research_discovery_routes_require_an_approver(monkeypatch) -> 
             dependency("view")
         assert excinfo.value.status_code == 403
         assert dependency("approve") is None
+
+
+def test_durable_knowledge_write_routes_require_an_approver(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Reviewer": {"secret": "approve", "role": "approver"},
+                "Observer": {"secret": "view", "role": "viewer"},
+            }
+        ),
+    )
+    paths = [
+        "/feedback",
+        "/personal-kb/proposals",
+        "/tasks/{task_id}/memory-proposal",
+    ]
+    for path in paths:
+        route = next(route for route in app.routes if getattr(route, "path", None) == path)
+        dependency = route.dependant.dependencies[0].call
+        with pytest.raises(HTTPException) as excinfo:
+            dependency("view")
+        assert excinfo.value.status_code == 403
+        assert dependency("approve") is None
