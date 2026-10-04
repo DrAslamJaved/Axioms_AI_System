@@ -95,6 +95,10 @@ real tool use and optional LLM synthesis:
   agents. Matching entries are snapshotted into the proposed task before human
   approval, then appended only to the matching local review draft; they never
   become verified facts or override evidence, privacy, safety, or approval gates.
+- **Urdu and bilingual content notes** are available only through bounded LLM
+  synthesis. Urdu script is validated before a generated note is accepted; a
+  malformed result falls back to the deterministic review plan. Every
+  translation remains subject to human subject-matter review before publication.
 - **FastAPI** exposes the service; **Streamlit** provides a review console.
 
 Every external or public-facing deliverable is held for explicit human approval.

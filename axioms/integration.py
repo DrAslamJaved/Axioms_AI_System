@@ -64,7 +64,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent(
             "Agentic content creation",
             IntegrationState.IMPLEMENTED,
-            "Bounded LLM editorial review over deterministic content packages; outcome-reference guardrail and publication remain blocked.",
+            "Bounded LLM planning synthesis supports validated Urdu or bilingual internal notes over deterministic content packages; outcome-reference guardrail and publication remain blocked.",
         ),
         IntegrationComponent(
             "Agentic social-media review",
