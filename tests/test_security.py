@@ -269,3 +269,22 @@ def test_reference_document_metadata_route_requires_an_approver(monkeypatch) -> 
         dependency("view")
     assert excinfo.value.status_code == 403
     assert dependency("approve") is None
+
+
+def test_individual_dispatch_job_route_requires_an_approver(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Reviewer": {"secret": "approve", "role": "approver"},
+                "Observer": {"secret": "view", "role": "viewer"},
+            }
+        ),
+    )
+    route = next(route for route in app.routes if getattr(route, "path", None) == "/dispatch/jobs/{job_id}")
+    dependency = route.dependant.dependencies[0].call
+
+    with pytest.raises(HTTPException) as excinfo:
+        dependency("view")
+    assert excinfo.value.status_code == 403
+    assert dependency("approve") is None
