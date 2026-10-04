@@ -80,6 +80,7 @@ from axioms.security import (
     AccessRole,
     ensure_role,
     require_api_key,
+    require_external_provider_consent,
     require_role,
     resolve_principal,
     resolve_role,
@@ -783,7 +784,11 @@ def create_task(payload: TaskIn, _auth: None = Depends(require_role(AccessRole.A
 
 
 @app.post("/lecture-plans")
-def create_lecture_plan(payload: LecturePlanIn, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
+def create_lecture_plan(
+    payload: LecturePlanIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
+) -> dict:
     try:
         return build_lecture_plan(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -792,7 +797,10 @@ def create_lecture_plan(payload: LecturePlanIn, _auth: None = Depends(require_ro
 
 @app.post("/lecture-plans/docx")
 def create_lecture_plan_docx(
-    payload: LecturePlanIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: LecturePlanIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         plan = build_lecture_plan(payload.to_agent_request())
@@ -802,7 +810,11 @@ def create_lecture_plan_docx(
 
 
 @app.post("/writing-drafts")
-def create_writing_draft(payload: WritingDraftIn, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
+def create_writing_draft(
+    payload: WritingDraftIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
+) -> dict:
     try:
         return build_writing_draft(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -811,7 +823,10 @@ def create_writing_draft(payload: WritingDraftIn, _auth: None = Depends(require_
 
 @app.post("/writing-drafts/docx")
 def create_writing_draft_docx(
-    payload: WritingDraftIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: WritingDraftIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         draft = build_writing_draft(payload.to_agent_request())
@@ -863,7 +878,9 @@ def discover_semantic_scholar_papers(
 
 @app.post("/research-briefs/agentic")
 def create_agentic_research_brief(
-    payload: ResearchBriefIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: ResearchBriefIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     """Run the tool-using, LLM-synthesising research agent (safe with no LLM key)."""
     try:
@@ -908,7 +925,9 @@ def create_research_bibtex(
 
 @app.post("/assessment-blueprints")
 def create_assessment_blueprint(
-    payload: AssessmentBlueprintIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: AssessmentBlueprintIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     try:
         return build_assessment_blueprint(payload.to_agent_request()).to_dict()
@@ -918,7 +937,9 @@ def create_assessment_blueprint(
 
 @app.post("/assessment-blueprints/agentic")
 def create_agentic_assessment_blueprint(
-    payload: AssessmentBlueprintIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: AssessmentBlueprintIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     """Generate an instructor-only assessment review with a safe disabled-LLM fallback."""
     try:
@@ -933,7 +954,10 @@ def create_agentic_assessment_blueprint(
 
 @app.post("/assessment-blueprints/student-docx")
 def create_assessment_student_docx(
-    payload: AssessmentBlueprintIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: AssessmentBlueprintIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         blueprint = build_assessment_blueprint(payload.to_agent_request())
@@ -946,7 +970,10 @@ def create_assessment_student_docx(
 
 @app.post("/assessment-blueprints/instructor-docx")
 def create_assessment_instructor_docx(
-    payload: AssessmentBlueprintIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: AssessmentBlueprintIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         blueprint = build_assessment_blueprint(payload.to_agent_request())
@@ -958,7 +985,11 @@ def create_assessment_instructor_docx(
 
 
 @app.post("/content-packages")
-def create_content_package(payload: ContentPackageIn, _auth: None = Depends(require_role(AccessRole.APPROVER))) -> dict:
+def create_content_package(
+    payload: ContentPackageIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
+) -> dict:
     try:
         return build_content_package(payload.to_agent_request()).to_dict()
     except ValueError as error:
@@ -967,7 +998,9 @@ def create_content_package(payload: ContentPackageIn, _auth: None = Depends(requ
 
 @app.post("/content-packages/agentic")
 def create_agentic_content_review(
-    payload: ContentPackageIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: ContentPackageIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     """Generate an internal editorial review with a safe disabled-LLM fallback."""
     try:
@@ -982,7 +1015,10 @@ def create_agentic_content_review(
 
 @app.post("/content-packages/docx")
 def create_content_package_docx(
-    payload: ContentPackageIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: ContentPackageIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         package = build_content_package(payload.to_agent_request())
@@ -993,7 +1029,9 @@ def create_content_package_docx(
 
 @app.post("/social-media-packages")
 def create_social_media_package(
-    payload: SocialMediaPackageIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: SocialMediaPackageIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     try:
         return build_social_media_package(payload.to_agent_request()).to_dict()
@@ -1003,7 +1041,9 @@ def create_social_media_package(
 
 @app.post("/social-media-packages/agentic")
 def create_agentic_social_media_review(
-    payload: SocialMediaPackageIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: SocialMediaPackageIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     """Generate an internal review; this endpoint cannot schedule or publish posts."""
     try:
@@ -1018,7 +1058,10 @@ def create_agentic_social_media_review(
 
 @app.post("/social-media-packages/docx")
 def create_social_media_package_docx(
-    payload: SocialMediaPackageIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: SocialMediaPackageIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         package = build_social_media_package(payload.to_agent_request())
@@ -1031,7 +1074,9 @@ def create_social_media_package_docx(
 
 @app.post("/portfolio-packages")
 def create_portfolio_package(
-    payload: PortfolioPackageIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: PortfolioPackageIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     try:
         return build_portfolio_package(payload.to_agent_request()).to_dict()
@@ -1041,7 +1086,9 @@ def create_portfolio_package(
 
 @app.post("/portfolio-packages/agentic")
 def create_agentic_portfolio_review(
-    payload: PortfolioPackageIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: PortfolioPackageIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     """Generate an internal readiness review; this endpoint cannot act on GitHub."""
     try:
@@ -1056,7 +1103,10 @@ def create_agentic_portfolio_review(
 
 @app.post("/portfolio-packages/docx")
 def create_portfolio_package_docx(
-    payload: PortfolioPackageIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: PortfolioPackageIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         package = build_portfolio_package(payload.to_agent_request())
@@ -1067,7 +1117,9 @@ def create_portfolio_package_docx(
 
 @app.post("/autoeval-reports")
 def create_autoeval_report(
-    payload: AutoEvalReportIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: AutoEvalReportIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> dict:
     try:
         provider = get_provider()
@@ -1080,7 +1132,10 @@ def create_autoeval_report(
 
 @app.post("/autoeval-reports/docx")
 def create_autoeval_report_docx(
-    payload: AutoEvalReportIn, background: BackgroundTasks, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: AutoEvalReportIn,
+    background: BackgroundTasks,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _provider_consent: None = Depends(require_external_provider_consent),
 ) -> FileResponse:
     try:
         provider = get_provider()
