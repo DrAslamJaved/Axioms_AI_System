@@ -282,6 +282,8 @@ def test_task_lineage_handler_returns_metadata_only_revision_family(tmp_path: Pa
     assert [item["task_id"] for item in lineage["items"]] == [root.task_id, revision["task_id"]]
     assert "goal" not in lineage["items"][0]
     assert "approval_note" not in lineage["items"][0]
+    assert "reviewed_by" not in lineage["items"][0]
+    assert "revision_requested_by" not in lineage["items"][1]
 
 
 def test_revision_comparison_handler_returns_the_parent_diff(tmp_path: Path, monkeypatch) -> None:
