@@ -1,5 +1,6 @@
 import json
 import os
+from urllib.parse import urlencode
 
 import requests
 import streamlit as st
@@ -44,6 +45,16 @@ def _post(url: str, payload: dict, *, timeout: int = 30) -> requests.Response:
 
 def _get(url: str, *, timeout: int = 20) -> requests.Response:
     return requests.get(url, headers=_headers(), timeout=timeout)
+
+
+def _task_queue_url(*, status: str, limit: int, cursor: str | None = None) -> str:
+    """Build a bounded read-only work-queue request from non-content metadata."""
+    parameters: dict[str, str | int] = {"limit": limit}
+    if status != "all":
+        parameters["status"] = status
+    if cursor is not None:
+        parameters["cursor"] = cursor
+    return f"{API_URL}/tasks?{urlencode(parameters)}"
 
 
 # --- System readiness ---
@@ -131,6 +142,92 @@ with st.expander("Local provider usage summary", expanded=False):
             )
         else:
             st.info("No provider-reported token metadata has been recorded locally.")
+
+# --- Manual task work queue ---
+
+with st.expander("Task work queue", expanded=False):
+    st.caption(
+        "Manual, metadata-only queue. It does not refresh automatically or reveal task goals, drafts, "
+        "preferences, document metadata, or reviewer notes."
+    )
+    with st.form("task-work-queue"):
+        queue_status = st.selectbox(
+            "Lifecycle filter",
+            [
+                "all",
+                "planned",
+                "pending_approval",
+                "approved",
+                "running",
+                "cancellation_requested",
+                "cancelled",
+                "awaiting_review",
+                "completed",
+                "failed",
+                "rejected",
+            ],
+        )
+        queue_limit = st.selectbox("Maximum tasks", [10, 25, 50, 100], index=1)
+        queue_submitted = st.form_submit_button("Refresh task work queue")
+    if queue_submitted:
+        response = _get(_task_queue_url(status=queue_status, limit=queue_limit))
+        if response.ok:
+            st.session_state["task_work_queue"] = response.json()
+            st.session_state["task_work_queue_filters"] = {
+                "status": queue_status,
+                "limit": queue_limit,
+            }
+            st.session_state["task_work_queue_page"] = 1
+        else:
+            st.session_state.pop("task_work_queue", None)
+            st.error(f"Error {response.status_code}: {response.text}")
+    task_work_queue = st.session_state.get("task_work_queue")
+    if task_work_queue:
+        if task_work_queue["next_cursor"] and st.button("Load next queue page", key="task-work-queue-next"):
+            queue_filters = st.session_state.get("task_work_queue_filters")
+            if not queue_filters:
+                st.error("Refresh the task work queue before requesting another page.")
+            else:
+                response = _get(
+                    _task_queue_url(
+                        status=queue_filters["status"],
+                        limit=queue_filters["limit"],
+                        cursor=task_work_queue["next_cursor"],
+                    )
+                )
+                if response.ok:
+                    task_work_queue = response.json()
+                    st.session_state["task_work_queue"] = task_work_queue
+                    st.session_state["task_work_queue_page"] = (
+                        st.session_state.get("task_work_queue_page", 1) + 1
+                    )
+                else:
+                    st.error(f"Error {response.status_code}: {response.text}")
+        queue_items = task_work_queue["items"]
+        st.caption(f"Page {st.session_state.get('task_work_queue_page', 1)} — loaded only on request.")
+        if queue_items:
+            st.dataframe(
+                [
+                    {
+                        "Task ID": item["task_id"],
+                        "Created": item["created_at"],
+                        "Lifecycle": item["status"],
+                        "Risk": item["risk_tier"] or "unknown",
+                        "Graph": item["graph_version"] or "unknown",
+                        "Revision of": item["revision_of"] or "—",
+                        "Drafts": item["deliverable_count"],
+                        "References": item["reference_document_count"],
+                        "Preference scopes": ", ".join(item["preference_context_agents"]) or "—",
+                    }
+                    for item in queue_items
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+            if task_work_queue["next_cursor"]:
+                st.caption("Another metadata-only page is available. Select “Load next queue page” to request it.")
+        else:
+            st.info("No tasks match the selected lifecycle filter.")
 
 # --- Personal Knowledge Base governance ---
 
