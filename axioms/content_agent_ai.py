@@ -132,7 +132,7 @@ def run_agentic_content_review(
 ) -> AgenticContentResult:
     """Plan deterministically, then optionally generate a bounded editorial review."""
     settings = config or AgenticContentConfig()
-    package = build_content_package(request)
+    package = build_content_package(request, provider=provider)
     trace = [
         ContentAgentStep(
             ContentStepKind.PLAN,
