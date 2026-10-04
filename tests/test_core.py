@@ -218,6 +218,25 @@ def test_revision_comparison_rejects_a_task_without_a_parent(tmp_path: Path) -> 
         core.compare_revision(original.task_id)
 
 
+def test_task_trace_projects_only_lifecycle_metadata(tmp_path: Path) -> None:
+    core = _core(tmp_path)
+    record = core.create_task(TaskRequest(goal="Prepare a confidential research brief"))
+    core.decide(record.task_id, ApprovalDecision.APPROVE, "Approved privately", "Dr Aslam")
+
+    trace = core.task_trace(record.task_id)
+
+    assert trace["task_id"] == record.task_id
+    assert trace["status"] == TaskStatus.APPROVED.value
+    assert [event["kind"] for event in trace["events"]] == [
+        StepKind.PLAN_CREATED.value,
+        StepKind.APPROVAL_RECORDED.value,
+    ]
+    assert "request" not in trace
+    assert "deliverables" not in trace
+    assert "summary" not in trace["events"][0]
+    assert "Approved privately" not in str(trace)
+
+
 def test_only_approved_tasks_can_be_durably_queued_with_an_idempotent_trace(tmp_path: Path) -> None:
     core = _core(tmp_path)
     record = core.create_task(TaskRequest(goal="Prepare a lecture on spectral graph theory"))
