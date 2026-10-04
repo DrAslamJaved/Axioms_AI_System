@@ -97,7 +97,7 @@ class TaskStore:
         }
 
     def lineage(self, task_id: str) -> dict:
-        """Return a read-only revision family without drafts or review notes.
+        """Return a read-only revision family without content or human identities.
 
         A lineage is rooted at the earliest available task and includes every
         descendant revision. It is deliberately a metadata view: detailed task
@@ -176,13 +176,11 @@ def _task_queue_item(payload: dict) -> dict:
 
 
 def _lineage_item(payload: dict) -> dict:
-    """Project only revision metadata, never task content or reviewer notes."""
+    """Project only lifecycle metadata, never task content or human identities."""
     return {
         "task_id": payload["task_id"],
         "revision_of": payload.get("revision_of"),
-        "revision_requested_by": payload.get("revision_requested_by"),
         "created_at": payload["created_at"],
         "status": payload["status"],
         "risk_tier": payload.get("risk_tier"),
-        "reviewed_by": payload.get("reviewed_by"),
     }

@@ -1117,7 +1117,7 @@ def get_task(task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVE
 
 @app.get("/tasks/{task_id}/lineage")
 def get_task_lineage(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
-    """Return the read-only revision family metadata for a human reviewer."""
+    """Return a read-only revision lifecycle view with no human identities."""
     try:
         return core.task_lineage(task_id)
     except KeyError as error:

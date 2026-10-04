@@ -196,7 +196,7 @@ with st.expander("Agent trace inspector (approver)", expanded=False):
 with st.expander("Task revision lineage", expanded=False):
     st.caption(
         "Manual, metadata-only revision-family lookup. It excludes task goals, drafts, preferences, "
-        "document metadata, and reviewer notes; it does not refresh automatically or control a task."
+        "document metadata, reviewer notes, and human identities; it does not refresh automatically or control a task."
     )
     with st.form("task-lineage-inspector"):
         lineage_task_id = st.text_input("Task ID", placeholder="task_…", key="task-lineage-task-id")
@@ -224,8 +224,6 @@ with st.expander("Task revision lineage", expanded=False):
                     "Created": item["created_at"],
                     "Lifecycle": item["status"],
                     "Risk": item["risk_tier"] or "unknown",
-                    "Revision requested by": item["revision_requested_by"] or "—",
-                    "Reviewed by": item["reviewed_by"] or "—",
                 }
                 for item in task_lineage["items"]
             ],
