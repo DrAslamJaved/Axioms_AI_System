@@ -8,6 +8,8 @@ from pathlib import Path
 
 from docx import Document
 
+from axioms.llm import LLMDisabledError, LLMMessage, LLMProvider, get_provider
+
 
 class PortfolioAudience(StrEnum):
     ACADEMIC = "academic"
@@ -154,8 +156,10 @@ class PortfolioPackage:
 """
 
 
-def build_portfolio_package(request: PortfolioRequest) -> PortfolioPackage:
-    """Create a repository-ready plan without creating, modifying, or publishing a GitHub repo."""
+def build_portfolio_package(
+    request: PortfolioRequest, *, provider: LLMProvider | None = None
+) -> PortfolioPackage:
+    """Create an evidence-bound repository plan with bounded internal structure synthesis."""
     request.validate()
     structure = [
         RepositoryItem("README.md", "Scope, verified claims, installation, reproduction, and limitations."),
@@ -175,6 +179,7 @@ def build_portfolio_package(request: PortfolioRequest) -> PortfolioPackage:
     if request.include_demo_plan:
         structure.append(
             RepositoryItem("demo/", "A local, dry-run demonstration; no public hosting assumption."))
+    structure = list(_synthesise_repository_purposes(request, tuple(structure), provider or get_provider()))
     evidence_lines = tuple(
         f"[{item.evidence_id}] {item.claim} (source: {item.source_reference})"
         for item in request.verified_evidence
@@ -221,6 +226,90 @@ def build_portfolio_package(request: PortfolioRequest) -> PortfolioPackage:
         impact_summary=impact,
         publication_checks=checks,
     )
+
+
+
+_PORTFOLIO_SYSTEM_PROMPT = """You are the Axioms internal STEM AI portfolio-planning assistant.
+Improve only the internal purpose description for each supplied repository-plan
+item. Do not write a README, source code, notebook, demo, documentation,
+command, repository content, public portfolio copy, deployment plan, or GitHub
+action. Preserve every repository path, verified evidence record, dataset
+access boundary, requested visibility, licence and attribution requirement,
+testing-before-publication requirement, reproducibility requirement, and human
+approval boundary. Do not invent claims, citations, performance values,
+research outcomes, licences, permissions, data access, credentials, GitHub
+metadata, external links, novelty, or impact. Never create, change, commit,
+push, deploy, publish, or authorize a repository action.
+
+Return exactly one concise internal planning paragraph per supplied repository
+item, in its original order, separated by a line containing only `---`. Do not
+use headings, lists, code, commands, citations, links, or questions.
+"""
+
+
+def _synthesise_repository_purposes(
+    request: PortfolioRequest,
+    structure: tuple[RepositoryItem, ...],
+    provider: LLMProvider,
+) -> tuple[RepositoryItem, ...]:
+    """Use only well-formed internal descriptions; all evidence and release controls stay fixed."""
+    evidence = "\n".join(
+        f"- [{item.evidence_id}] {item.claim} (source: {item.source_reference})"
+        for item in request.verified_evidence
+    )
+    assets = "\n".join(
+        f"- {asset.name}: {asset.access_level.value}; permission: {asset.licence_or_permission or 'not supplied'}; "
+        f"attribution: {asset.attribution or 'not supplied'}"
+        for asset in request.dataset_assets
+    ) or "- No dataset assets declared."
+    plan_items = "\n".join(
+        f"{index}. Path: {item.path}; current purpose: {item.purpose}"
+        for index, item in enumerate(structure, start=1)
+    )
+    user_prompt = (
+        f"Project title: {request.project_title}\n"
+        f"Audience: {request.target_audience.value}\n"
+        f"Proposed repository visibility: {request.repository_visibility.value}\n"
+        f"Research summary: {request.research_summary}\n\n"
+        f"Verified evidence records:\n{evidence}\n\n"
+        f"Declared dataset assets:\n{assets}\n\n"
+        f"Repository-plan items:\n{plan_items}\n"
+    )
+    try:
+        result = provider.complete(
+            [LLMMessage("system", _PORTFOLIO_SYSTEM_PROMPT), LLMMessage("user", user_prompt)],
+            max_tokens=1_500,
+            temperature=0.2,
+        )
+    except LLMDisabledError:
+        return structure
+    except Exception:  # noqa: BLE001 - failed synthesis must retain the evidence-bound package
+        return structure
+    generated = _parse_repository_purposes(result.text, len(structure))
+    if generated is None:
+        return structure
+    return tuple(
+        RepositoryItem(path=item.path, purpose=purpose)
+        for item, purpose in zip(structure, generated, strict=True)
+    )
+
+
+def _parse_repository_purposes(text: str, expected_items: int) -> tuple[str, ...] | None:
+    """Reject malformed or externally actionable output before it changes the internal plan."""
+    blocks = [block.strip() for block in text.split("---") if block.strip()]
+    if len(blocks) != expected_items:
+        return None
+    if any(
+        "\n" in block
+        or "?" in block
+        or "http://" in block.casefold()
+        or "https://" in block.casefold()
+        or block.startswith(("-", "*", "#", "`"))
+        or len(block) > 1_500
+        for block in blocks
+    ):
+        return None
+    return tuple(blocks)
 
 
 def export_docx(package: PortfolioPackage, destination: Path) -> Path:
