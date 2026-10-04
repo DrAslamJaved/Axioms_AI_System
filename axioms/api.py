@@ -1117,8 +1117,10 @@ def get_task_lineage(task_id: str, _auth: None = Depends(require_api_key)) -> di
 
 
 @app.get("/tasks/{task_id}/revision-comparison")
-def compare_task_revision(task_id: str, _auth: None = Depends(require_api_key)) -> dict:
-    """Return the direct task-request diff and approval boundary for one linked revision."""
+def compare_task_revision(
+    task_id: str, _auth: None = Depends(require_role(AccessRole.APPROVER))
+) -> dict:
+    """Return a content-bearing revision diff only to an authorized human reviewer."""
     try:
         return core.compare_revision(task_id)
     except KeyError as error:
