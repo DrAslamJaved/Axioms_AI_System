@@ -595,6 +595,23 @@ def get_document_metadata(document_id: str, _auth: None = Depends(require_api_ke
     return document.to_dict()
 
 
+@app.delete("/documents/{document_id}")
+def delete_document(
+    document_id: str,
+    _auth: None = Depends(require_role(AccessRole.ADMIN)),
+    principal: str | None = Depends(resolve_principal),
+) -> dict:
+    """Permanently delete an ingested document's local text and metadata.
+
+    Existing task attachment snapshots remain as non-content provenance.  This
+    endpoint never deletes tasks, alters approval history, or exposes text.
+    """
+    if not document_store.delete(document_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    log_event("reference_document_deleted", document_id=document_id, principal=principal)
+    return {"document_id": document_id, "status": "deleted"}
+
+
 @app.post("/tasks/{task_id}/reference-documents")
 def attach_reference_document(
     task_id: str,
