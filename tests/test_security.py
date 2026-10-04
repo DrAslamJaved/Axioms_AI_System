@@ -404,3 +404,30 @@ def test_optional_llm_generation_routes_require_an_approver(monkeypatch) -> None
             dependency("view")
         assert excinfo.value.status_code == 403
         assert dependency("approve") is None
+
+
+def test_remaining_service_operation_routes_require_an_approver(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Reviewer": {"secret": "approve", "role": "approver"},
+                "Observer": {"secret": "view", "role": "viewer"},
+            }
+        ),
+    )
+    paths = [
+        "/similarity/screen",
+        "/tasks",
+        "/research-briefs",
+        "/research-briefs/docx",
+        "/research-briefs/bibtex",
+        "/tasks/{task_id}/cross-agent-autoeval",
+    ]
+    for path in paths:
+        route = next(route for route in app.routes if getattr(route, "path", None) == path)
+        dependency = route.dependant.dependencies[0].call
+        with pytest.raises(HTTPException) as excinfo:
+            dependency("view")
+        assert excinfo.value.status_code == 403
+        assert dependency("approve") is None

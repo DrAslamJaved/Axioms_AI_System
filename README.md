@@ -205,10 +205,12 @@ Copy `.env.example` and set the values appropriate to your deployment:
 | `CROSSREF_MAILTO` | Polite Crossref identification (recommended) | unset |
 | `TAVILY_API_KEY` | Enables read-only research discovery | unset (disabled) |
 
-In named-key mode, `viewer` keys can inspect authenticated work-queue metadata but cannot make
-approval, revision, recovery, memory-governance, dispatch, or local-execution
-decisions; create durable knowledge proposals; or initiate external research
-discovery or LLM-capable generation. `approver` keys may make those reviewed decisions, and only `admin` keys can acknowledge a
+In named-key mode, `viewer` keys can inspect authenticated aggregate and
+work-queue metadata only. They cannot invoke service operations, make approval,
+revision, recovery, memory-governance, dispatch, or local-execution decisions;
+create durable knowledge proposals; or initiate local screening, task creation,
+research generation, external discovery, or LLM-capable generation. `approver`
+keys may make those reviewed decisions, and only `admin` keys can acknowledge a
 HIGH-risk data-governance override. Existing single-key and legacy named-key
 deployments retain their prior administrator-equivalent behaviour.
 
