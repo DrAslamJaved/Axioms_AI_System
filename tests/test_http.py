@@ -201,11 +201,17 @@ def test_health_reports_named_auth_mode(monkeypatch) -> None:
     assert response.json()["auth"] == "named"
 
 
-def test_named_viewer_is_read_only_and_can_access_authenticated_task_metadata(monkeypatch) -> None:
+def test_named_viewer_can_access_queue_metadata_but_not_content_bearing_task_details(monkeypatch) -> None:
     created = client.post("/tasks", json={"goal": "Prepare a lecture on spectral graph theory"})
     task_id = created.json()["task_id"]
     monkeypatch.setenv(
-        "AXIOMS_API_KEYS", json.dumps({"Observer": {"secret": "viewer-key", "role": "viewer"}})
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Observer": {"secret": "viewer-key", "role": "viewer"},
+                "Reviewer": {"secret": "approver-key", "role": "approver"},
+            }
+        ),
     )
     forbidden = client.post(
         f"/tasks/{task_id}/approval",
@@ -213,8 +219,16 @@ def test_named_viewer_is_read_only_and_can_access_authenticated_task_metadata(mo
         headers={"X-API-Key": "viewer-key"},
     )
     assert forbidden.status_code == 403
-    metadata = client.get(f"/tasks/{task_id}", headers={"X-API-Key": "viewer-key"})
-    assert metadata.status_code == 200
+    queue = client.get("/tasks", headers={"X-API-Key": "viewer-key"})
+    assert queue.status_code == 200
+    assert queue.json()["items"]
+
+    forbidden_details = client.get(f"/tasks/{task_id}", headers={"X-API-Key": "viewer-key"})
+    assert forbidden_details.status_code == 403
+
+    details = client.get(f"/tasks/{task_id}", headers={"X-API-Key": "approver-key"})
+    assert details.status_code == 200
+    assert details.json()["task_id"] == task_id
 
 
 def test_named_approver_cannot_override_high_risk_block_but_admin_can(monkeypatch) -> None:
