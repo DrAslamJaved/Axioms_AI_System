@@ -25,6 +25,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from axioms.usage import record_provider_usage
+
 # A sensible, documented default. Model identifiers change over time; the exact
 # string is expected to be supplied through AXIOMS_LLM_MODEL in deployment and
 # verified against the provider's current model list.
@@ -169,7 +171,7 @@ class AnthropicProvider:
             messages=[{"role": m.role, "content": m.content} for m in conversation],
         )
         text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
-        return LLMResult(
+        result = LLMResult(
             text=text,
             provider=self.name,
             model=self._model,
@@ -177,6 +179,13 @@ class AnthropicProvider:
             input_tokens=_reported_token_count(getattr(response, "usage", None), "input_tokens"),
             output_tokens=_reported_token_count(getattr(response, "usage", None), "output_tokens"),
         )
+        record_provider_usage(
+            provider=result.provider,
+            model=result.model,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+        )
+        return result
 
 
 class OpenAIProvider:
@@ -211,7 +220,7 @@ class OpenAIProvider:
             messages=[{"role": m.role, "content": m.content} for m in messages],
         )
         choice = response.choices[0]
-        return LLMResult(
+        result = LLMResult(
             text=choice.message.content or "",
             provider=self.name,
             model=self._model,
@@ -219,6 +228,13 @@ class OpenAIProvider:
             input_tokens=_reported_token_count(getattr(response, "usage", None), "prompt_tokens"),
             output_tokens=_reported_token_count(getattr(response, "usage", None), "completion_tokens"),
         )
+        record_provider_usage(
+            provider=result.provider,
+            model=result.model,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+        )
+        return result
 
 
 def get_provider(env: Mapping[str, str] | None = None) -> LLMProvider:
