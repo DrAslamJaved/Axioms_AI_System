@@ -132,6 +132,69 @@ with st.expander("Local provider usage summary", expanded=False):
         else:
             st.info("No provider-reported token metadata has been recorded locally.")
 
+# --- Manual task work queue ---
+
+with st.expander("Task work queue", expanded=False):
+    st.caption(
+        "Manual, metadata-only queue. It does not refresh automatically or reveal task goals, drafts, "
+        "preferences, document metadata, or reviewer notes."
+    )
+    with st.form("task-work-queue"):
+        queue_status = st.selectbox(
+            "Lifecycle filter",
+            [
+                "all",
+                "planned",
+                "pending_approval",
+                "approved",
+                "running",
+                "cancellation_requested",
+                "cancelled",
+                "awaiting_review",
+                "completed",
+                "failed",
+                "rejected",
+            ],
+        )
+        queue_limit = st.selectbox("Maximum tasks", [10, 25, 50, 100], index=1)
+        queue_submitted = st.form_submit_button("Refresh task work queue")
+    if queue_submitted:
+        queue_url = f"{API_URL}/tasks?limit={queue_limit}"
+        if queue_status != "all":
+            queue_url = f"{queue_url}&status={queue_status}"
+        response = _get(queue_url)
+        if response.ok:
+            st.session_state["task_work_queue"] = response.json()
+        else:
+            st.session_state.pop("task_work_queue", None)
+            st.error(f"Error {response.status_code}: {response.text}")
+    task_work_queue = st.session_state.get("task_work_queue")
+    if task_work_queue:
+        queue_items = task_work_queue["items"]
+        if queue_items:
+            st.dataframe(
+                [
+                    {
+                        "Task ID": item["task_id"],
+                        "Created": item["created_at"],
+                        "Lifecycle": item["status"],
+                        "Risk": item["risk_tier"] or "unknown",
+                        "Graph": item["graph_version"] or "unknown",
+                        "Revision of": item["revision_of"] or "—",
+                        "Drafts": item["deliverable_count"],
+                        "References": item["reference_document_count"],
+                        "Preference scopes": ", ".join(item["preference_context_agents"]) or "—",
+                    }
+                    for item in queue_items
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+            if task_work_queue["next_cursor"]:
+                st.caption("More metadata-only results are available through the authenticated API pagination cursor.")
+        else:
+            st.info("No tasks match the selected lifecycle filter.")
+
 # --- Personal Knowledge Base governance ---
 
 with st.expander("Personal Knowledge Base governance", expanded=False):
