@@ -114,7 +114,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent(
             "Read-only task lineage",
             IntegrationState.IMPLEMENTED,
-            "Authenticated reviewers can inspect a revision family as projected metadata, without task goals, drafts, review notes, approval changes, or external action.",
+            "Authenticated reviewers can inspect a revision family as projected lifecycle metadata, without task goals, drafts, review notes, requester or reviewer identities, approval changes, or external action.",
         ),
         IntegrationComponent(
             "Revision comparison",
