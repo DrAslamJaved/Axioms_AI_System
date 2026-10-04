@@ -50,12 +50,19 @@ class LLMMessage:
 
 @dataclass(frozen=True, slots=True)
 class LLMResult:
-    """The provider-agnostic result of a completion."""
+    """The provider-agnostic result of a completion.
+
+    Token counts are provider-reported metadata, not estimates.  A value of
+    zero means that the provider did not return that field (or that this is an
+    offline deterministic provider); it must never be interpreted as cost.
+    """
 
     text: str
     provider: str
     model: str
     stop_reason: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 @runtime_checkable
@@ -120,6 +127,14 @@ def _split_system(messages: Sequence[LLMMessage]) -> tuple[str | None, list[LLMM
     return system, conversation
 
 
+def _reported_token_count(usage: object | None, field: str) -> int:
+    """Return one non-negative provider-reported usage count, otherwise zero."""
+    if usage is None:
+        return 0
+    raw = usage.get(field) if isinstance(usage, Mapping) else getattr(usage, field, None)
+    return raw if isinstance(raw, int) and raw >= 0 else 0
+
+
 class AnthropicProvider:
     """Anthropic Messages API backend. The SDK is imported lazily."""
 
@@ -154,7 +169,14 @@ class AnthropicProvider:
             messages=[{"role": m.role, "content": m.content} for m in conversation],
         )
         text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
-        return LLMResult(text=text, provider=self.name, model=self._model, stop_reason=response.stop_reason)
+        return LLMResult(
+            text=text,
+            provider=self.name,
+            model=self._model,
+            stop_reason=response.stop_reason,
+            input_tokens=_reported_token_count(getattr(response, "usage", None), "input_tokens"),
+            output_tokens=_reported_token_count(getattr(response, "usage", None), "output_tokens"),
+        )
 
 
 class OpenAIProvider:
@@ -194,6 +216,8 @@ class OpenAIProvider:
             provider=self.name,
             model=self._model,
             stop_reason=choice.finish_reason,
+            input_tokens=_reported_token_count(getattr(response, "usage", None), "prompt_tokens"),
+            output_tokens=_reported_token_count(getattr(response, "usage", None), "completion_tokens"),
         )
 
 
