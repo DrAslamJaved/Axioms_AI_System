@@ -105,6 +105,7 @@ from axioms.tools import (
     TavilyClient,
     TavilyError,
 )
+from axioms.usage import UsageStore
 from axioms.writing_agent import DocumentType, WritingRequest, build_writing_draft
 from axioms.writing_agent import export_docx as export_writing_docx
 
@@ -559,6 +560,12 @@ def system_readiness() -> dict:
 def operations_summary(_auth: None = Depends(require_api_key)) -> dict:
     """Return read-only aggregate task and local-worker health for human operators."""
     return core.operational_summary()
+
+
+@app.get("/usage/summary")
+def usage_summary(_auth: None = Depends(require_api_key)) -> dict:
+    """Return aggregate local provider token counts; never prompts, outputs, or billing estimates."""
+    return UsageStore().summary()
 
 
 @app.post("/documents")
