@@ -4,6 +4,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 from axioms.agents import (
+    apply_approved_preferences,
     autoeval_draft,
     lecture_draft,
     portfolio_draft,
@@ -68,11 +69,13 @@ class AxiomsCore:
 
     def create_task(self, request: TaskRequest) -> TaskRecord:
         graph = build_task_graph(request)
+        preference_context = _snapshot_approved_preferences(self.kb_store.entries(), graph.subtasks)
         record = TaskRecord(
             request=request,
             subtasks=list(graph.subtasks),
             graph_version=graph.version,
             graph_digest=graph.digest,
+            preference_context=preference_context,
         )
         policy = assess_request(request)
         record.status = TaskStatus.PENDING_APPROVAL if policy.requires_approval else TaskStatus.PLANNED
@@ -87,6 +90,16 @@ class AxiomsCore:
                 ),
             )
         )
+        if preference_context:
+            record.agent_trace.append(
+                AgentStep(
+                    kind=StepKind.PREFERENCE_CONTEXT_SNAPSHOTTED,
+                    summary=(
+                        f"Snapshotted {sum(len(items) for items in preference_context.values())} "
+                        "owner-approved preference(s) for the matching specialist draft(s)."
+                    ),
+                )
+            )
         self.store.save(record)
         return record
 
@@ -404,13 +417,23 @@ class AxiomsCore:
                         max_workers=worker_count, thread_name_prefix="axioms-local"
                     ) as executor:
                         drafts = {
-                            subtask.agent.value: executor.submit(_run_local_draft, record.request, subtask)
+                            subtask.agent.value: executor.submit(
+                                _run_local_draft_with_preferences,
+                                record.request,
+                                subtask,
+                                record.preference_context.get(subtask.agent.value, []),
+                            )
                             for subtask in layer_subtasks
                         }
                         layer_deliverables = [drafts[subtask.agent.value].result() for subtask in layer_subtasks]
                 else:
                     layer_deliverables = [
-                        _run_local_draft(record.request, subtask) for subtask in layer_subtasks
+                        _run_local_draft_with_preferences(
+                            record.request,
+                            subtask,
+                            record.preference_context.get(subtask.agent.value, []),
+                        )
+                        for subtask in layer_subtasks
                     ]
 
                 deliverables.extend(layer_deliverables)
@@ -712,6 +735,32 @@ def _run_local_draft(request: TaskRequest, subtask: Subtask) -> Deliverable:
     return draft
 
 
+def _run_local_draft_with_preferences(
+    request: TaskRequest, subtask: Subtask, preferences: list[dict]
+) -> Deliverable:
+    """Keep the legacy draft-runner seam stable while adding only task-snapshotted preferences."""
+    return apply_approved_preferences(_run_local_draft(request, subtask), preferences)
+
+
+def _snapshot_approved_preferences(entries: list[dict], subtasks: list[Subtask]) -> dict[str, list[dict]]:
+    """Freeze approved preferences into the proposed task so later KB changes cannot alter an approved run."""
+    active_agents = {subtask.agent.value for subtask in subtasks}
+    context: dict[str, list[dict]] = {}
+    for entry in entries:
+        targets = entry.get("agent_types", [])
+        matching_agents = active_agents if not targets else active_agents.intersection(targets)
+        snapshot = {
+            "category": entry["category"],
+            "preference_key": entry["preference_key"],
+            "preference_value": entry["preference_value"],
+            "proposal_id": entry["proposal_id"],
+            "approved_at": entry["approved_at"],
+        }
+        for agent in sorted(matching_agents):
+            context.setdefault(agent, []).append(snapshot)
+    return context
+
+
 _REVISION_REQUEST_FIELDS = ("goal", "audience", "deadline", "constraints", "external_delivery", "revision_note")
 
 
@@ -829,6 +878,11 @@ def _record_from_payload(payload: dict) -> TaskRecord:
         )
         for item in payload.get("agent_trace", [])
     ]
+    record.preference_context = {
+        AgentName(agent).value: [dict(entry) for entry in entries]
+        for agent, entries in payload.get("preference_context", {}).items()
+        if isinstance(entries, list)
+    }
     record.reviewed_by = payload.get("reviewed_by")
     record.revision_of = payload.get("revision_of")
     record.revision_requested_by = payload.get("revision_requested_by")
