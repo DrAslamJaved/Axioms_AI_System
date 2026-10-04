@@ -191,6 +191,49 @@ with st.expander("Agent trace inspector (approver)", expanded=False):
         )
         st.caption("This inspector is read-only and provides no approval, execution, scheduling, or release controls.")
 
+# --- Manual task lineage inspector ---
+
+with st.expander("Task revision lineage", expanded=False):
+    st.caption(
+        "Manual, metadata-only revision-family lookup. It excludes task goals, drafts, preferences, "
+        "document metadata, and reviewer notes; it does not refresh automatically or control a task."
+    )
+    with st.form("task-lineage-inspector"):
+        lineage_task_id = st.text_input("Task ID", placeholder="task_…", key="task-lineage-task-id")
+        lineage_submitted = st.form_submit_button("Refresh revision lineage")
+    if lineage_submitted:
+        if not lineage_task_id.strip():
+            st.warning("Enter a task ID to inspect its revision lineage.")
+        else:
+            response = _get(f"{API_URL}/tasks/{lineage_task_id.strip()}/lineage")
+            if response.ok:
+                st.session_state["task_lineage"] = response.json()
+            else:
+                st.session_state.pop("task_lineage", None)
+                st.error(f"Error {response.status_code}: {response.text}")
+    task_lineage = st.session_state.get("task_lineage")
+    if task_lineage:
+        st.caption(
+            f"Revision root: {task_lineage['root_task_id']} · requested task: {task_lineage['requested_task_id']}"
+        )
+        st.dataframe(
+            [
+                {
+                    "Task ID": item["task_id"],
+                    "Parent task": item["revision_of"] or "—",
+                    "Created": item["created_at"],
+                    "Lifecycle": item["status"],
+                    "Risk": item["risk_tier"] or "unknown",
+                    "Revision requested by": item["revision_requested_by"] or "—",
+                    "Reviewed by": item["reviewed_by"] or "—",
+                }
+                for item in task_lineage["items"]
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+        st.caption("This inspector is read-only and provides no approval, execution, scheduling, or release controls.")
+
 # --- Manual provider usage summary ---
 
 with st.expander("Local provider usage summary", expanded=False):
