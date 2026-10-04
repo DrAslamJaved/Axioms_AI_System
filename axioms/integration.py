@@ -119,7 +119,7 @@ def build_system_readiness_report() -> SystemReadinessReport:
         IntegrationComponent(
             "Revision comparison",
             IntegrationState.IMPLEMENTED,
-            "Authenticated reviewers can compare a linked revision with its direct parent, including the recorded rejection note and typed request differences; it cannot approve, edit, or execute either task.",
+            "An approver or administrator can compare a linked revision with its direct parent, including the recorded rejection note and typed request differences; it cannot approve, edit, or execute either task.",
         ),
         IntegrationComponent(
             "Approved PKB preference injection",
