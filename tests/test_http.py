@@ -201,6 +201,50 @@ def test_health_reports_named_auth_mode(monkeypatch) -> None:
     assert response.json()["auth"] == "named"
 
 
+def test_named_viewer_is_read_only_and_can_access_authenticated_task_metadata(monkeypatch) -> None:
+    created = client.post("/tasks", json={"goal": "Prepare a lecture on spectral graph theory"})
+    task_id = created.json()["task_id"]
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS", json.dumps({"Observer": {"secret": "viewer-key", "role": "viewer"}})
+    )
+    forbidden = client.post(
+        f"/tasks/{task_id}/approval",
+        json={"decision": "approve", "approved_by": "Observer", "note": "Reviewed"},
+        headers={"X-API-Key": "viewer-key"},
+    )
+    assert forbidden.status_code == 403
+    metadata = client.get(f"/tasks/{task_id}", headers={"X-API-Key": "viewer-key"})
+    assert metadata.status_code == 200
+
+
+def test_named_approver_cannot_override_high_risk_block_but_admin_can(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AXIOMS_API_KEYS",
+        json.dumps(
+            {
+                "Reviewer": {"secret": "approver-key", "role": "approver"},
+                "Dr Aslam": {"secret": "admin-key", "role": "admin"},
+            }
+        ),
+    )
+    created = client.post(
+        "/tasks",
+        json={"goal": "Export student grades for the registrar"},
+        headers={"X-API-Key": "approver-key"},
+    )
+    task_id = created.json()["task_id"]
+    body = {"decision": "approve", "approved_by": "Reviewer", "note": "Reviewed", "override_blocking": True}
+    denied = client.post(
+        f"/tasks/{task_id}/approval", json=body, headers={"X-API-Key": "approver-key"}
+    )
+    assert denied.status_code == 403
+    approved = client.post(
+        f"/tasks/{task_id}/approval", json=body, headers={"X-API-Key": "admin-key"}
+    )
+    assert approved.status_code == 200
+    assert approved.json()["approved_by"] == "Dr Aslam"
+
+
 # ---------------------------------------------------------------------------
 # LLM misconfiguration → 503
 # ---------------------------------------------------------------------------
