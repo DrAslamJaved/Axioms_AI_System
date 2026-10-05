@@ -49,7 +49,9 @@ request. Do not force-push or overwrite existing work.
 - Set secrets in the hosting provider; never in `.env` committed to Git.
 - Keep `AXIOMS_LLM_PROVIDER=disabled` until provider, spending limit, logging, and tests
   have been approved.
-- Put the service behind TLS and authenticated access.
+- Put the service behind TLS and authenticated access. Set
+  `AXIOMS_REQUIRE_AUTH=true` and configure `AXIOMS_API_KEYS` (preferred) or
+  `AXIOMS_API_KEY`; otherwise protected operations fail closed with `503`.
 - Complete a data-retention policy before uploading lecture, paper, or student materials.
 - Exercise backup/restore and approval-gate tests before inviting other users.
 - Do not expose the Streamlit or FastAPI ports publicly until authenticated access, TLS, and a
