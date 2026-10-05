@@ -15,6 +15,7 @@ from axioms.security import (
     auth_required,
     configured_api_key,
     require_api_key,
+    require_external_discovery_consent,
     require_external_provider_consent,
     require_role,
     resolve_principal,
@@ -76,6 +77,38 @@ def test_external_provider_consent_is_required_only_for_configured_external_llms
 
     monkeypatch.setenv("AXIOMS_LLM_PROVIDER", "openai")
     assert require_external_provider_consent("yes") is None
+
+
+
+def test_external_discovery_consent_is_explicit_and_audited(caplog) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER.name)
+    token = bind_request_id("discovery-run_2026")
+    try:
+        with pytest.raises(HTTPException, match="External discovery requires") as excinfo:
+            require_external_discovery_consent(None)
+    finally:
+        reset_request_id(token)
+
+    assert excinfo.value.status_code == 428
+    missing = json.loads(caplog.records[-1].message)
+    assert missing == {
+        "event": "external_discovery_consent_missing",
+        "request_id": "discovery-run_2026",
+        "timestamp": missing["timestamp"],
+    }
+
+    caplog.clear()
+    token = bind_request_id("discovery-run_2027")
+    try:
+        assert require_external_discovery_consent("true") is None
+    finally:
+        reset_request_id(token)
+    accepted = json.loads(caplog.records[-1].message)
+    assert accepted == {
+        "event": "external_discovery_consent_accepted",
+        "request_id": "discovery-run_2027",
+        "timestamp": accepted["timestamp"],
+    }
 
 
 def test_accepted_external_provider_consent_is_audited_without_request_content(monkeypatch, caplog) -> None:
@@ -416,6 +449,11 @@ def test_external_research_discovery_routes_require_an_approver(monkeypatch) -> 
             dependency("view")
         assert excinfo.value.status_code == 403
         assert dependency("approve") is None
+        consent_dependency = route.dependant.dependencies[1].call
+        with pytest.raises(HTTPException) as consent_error:
+            consent_dependency(None)
+        assert consent_error.value.status_code == 428
+        assert consent_dependency("true") is None
 
 
 def test_durable_knowledge_write_routes_require_an_approver(monkeypatch) -> None:
