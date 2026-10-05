@@ -80,6 +80,7 @@ from axioms.security import (
     AccessRole,
     ensure_role,
     require_api_key,
+    require_external_discovery_consent,
     require_external_provider_consent,
     require_role,
     resolve_principal,
@@ -845,7 +846,9 @@ def create_research_brief(payload: ResearchBriefIn, _auth: None = Depends(requir
 
 @app.post("/research/discover")
 def discover_research_sources(
-    payload: ResearchDiscoveryIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: ResearchDiscoveryIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _discovery_consent: None = Depends(require_external_discovery_consent),
 ) -> dict:
     """Let an authorized reviewer request unverified evidence candidates from Tavily."""
     try:
@@ -856,7 +859,9 @@ def discover_research_sources(
 
 @app.post("/research/discover/arxiv")
 def discover_arxiv_preprints(
-    payload: ResearchDiscoveryIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: ResearchDiscoveryIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _discovery_consent: None = Depends(require_external_discovery_consent),
 ) -> dict:
     """Let an authorized reviewer request arXiv candidates for later verification."""
     try:
@@ -867,7 +872,9 @@ def discover_arxiv_preprints(
 
 @app.post("/research/discover/semantic-scholar")
 def discover_semantic_scholar_papers(
-    payload: ResearchDiscoveryIn, _auth: None = Depends(require_role(AccessRole.APPROVER))
+    payload: ResearchDiscoveryIn,
+    _auth: None = Depends(require_role(AccessRole.APPROVER)),
+    _discovery_consent: None = Depends(require_external_discovery_consent),
 ) -> dict:
     """Let an authorized reviewer request bibliographic candidates for verification."""
     try:

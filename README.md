@@ -35,15 +35,18 @@ real tool use and optional LLM synthesis:
   collect unverified source candidates with retrieval provenance. Candidates
   cannot be cited or synthesised until they pass the existing verification flow.
   In named-key deployments, starting this external lookup requires an
-  `approver` or `admin` key.
+  `approver` or `admin` key and the per-request
+  `X-Axioms-Allow-External-Discovery: true` header.
 - **arXiv discovery** adds cached, rate-limited, read-only preprint candidates
   with Atom provenance. A preprint is neither peer-reviewed evidence nor a
   verified claim and remains ineligible for synthesis until separately checked.
-  Starting the external lookup requires an `approver` or `admin` key.
+  Starting the external lookup requires an `approver` or `admin` key and
+  explicit per-request external-discovery consent.
 - **Semantic Scholar discovery** adds keyed, cached, rate-limited, read-only
   bibliographic candidates. Its metadata and citation counts are discovery
   signals only, not evidence of quality, publication status, or claim validity.
-  Starting the external lookup requires an `approver` or `admin` key.
+  Starting the external lookup requires an `approver` or `admin` key and
+  explicit per-request external-discovery consent.
 - **Durable local dispatch** queues only approved local tasks in SQLite with an
   idempotency key, atomic leased worker claim, bounded retry, and dead-letter state.
   A manually invoked local worker runs deterministic drafts only; it cannot
@@ -332,6 +335,7 @@ curl -X POST http://127.0.0.1:8000/research-briefs/agentic \
 curl -X POST http://127.0.0.1:8000/research/discover \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-secret" \
+  -H "X-Axioms-Allow-External-Discovery: true" \
   -d '{"query":"fuzzy similarity methods for drug-target interaction prediction", "max_results":5}'
 
 # Ingest a non-sensitive local reference document. This stores extracted text
@@ -403,6 +407,9 @@ In named-key deployments, all Specialist Agent, agentic-review, and AutoEval
 generation routes in this table require an `approver` or `admin` key because a
 configured provider may receive the submitted material. The default provider is
 disabled; this authorization boundary also applies when the local fallback is used.
+The three external research-discovery routes also require the explicit
+`X-Axioms-Allow-External-Discovery: true` header on every request; their consent
+outcome is recorded only as correlated local audit metadata.
 | Cross-agent AutoEval | `POST /tasks/{task_id}/cross-agent-autoeval` after local execution | Review-only task deliverable; final human review still required |
 | Task revision | `POST /tasks/{task_id}/revise` after final rejection | Creates a linked new task; fresh approval remains required |
 | Task work queue | `GET /tasks` | Authenticated metadata projection only; excludes goals, drafts, preferences, documents, and reviewer notes |
