@@ -272,3 +272,19 @@ def require_external_provider_consent(
         )
     if provider in _EXTERNAL_LLM_PROVIDERS:
         log_event("external_provider_consent_accepted", provider=provider)
+
+
+def require_external_discovery_consent(
+    x_axioms_allow_external_discovery: str | None = Header(
+        default=None, alias="X-Axioms-Allow-External-Discovery"
+    ),
+) -> None:
+    """Require explicit consent before a research query is sent to an external discovery service."""
+    consented = (x_axioms_allow_external_discovery or "").strip().casefold() in {"1", "true", "yes"}
+    if not consented:
+        log_event("external_discovery_consent_missing")
+        raise HTTPException(
+            status_code=428,
+            detail="External discovery requires X-Axioms-Allow-External-Discovery: true for this request.",
+        )
+    log_event("external_discovery_consent_accepted")
