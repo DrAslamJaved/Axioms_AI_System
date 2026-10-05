@@ -13,9 +13,11 @@ Two modes are supported:
   identity binding. ``approved_by`` still comes from the request body -- honest
   but not authenticated.
 
-When neither is set the app runs in open development mode. Deployment posture
-is available only through the authenticated readiness report, not the public
-liveness probe.
+When neither is set the app runs in open development mode unless
+``AXIOMS_REQUIRE_AUTH=true`` is explicitly configured. In that strict posture,
+protected operations fail closed until an API key is supplied. Deployment
+posture is available only through the authenticated readiness report, not the
+public liveness probe.
 """
 
 from __future__ import annotations
@@ -142,9 +144,14 @@ def configured_api_key() -> str | None:
     return key or None
 
 
+def auth_required() -> bool:
+    """Return whether a deployment must fail closed without configured credentials."""
+    return os.getenv("AXIOMS_REQUIRE_AUTH", "false").strip().casefold() in {"1", "true", "yes"}
+
+
 def auth_enabled() -> bool:
     try:
-        return _named_keys() is not None or configured_api_key() is not None
+        return auth_required() or _named_keys() is not None or configured_api_key() is not None
     except SecurityConfigurationError:
         # A broken configured authentication system must never be reported as open.
         return True
@@ -160,6 +167,8 @@ def auth_mode() -> str:
         return "named"
     if configured_api_key():
         return "single"
+    if auth_required():
+        return "required-unconfigured"
     return "open-dev"
 
 
@@ -177,6 +186,11 @@ def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Ke
 
     expected = configured_api_key()
     if expected is None:
+        if auth_required():
+            raise HTTPException(
+                status_code=503,
+                detail="Authentication is required but no API key is configured; protected operations are unavailable.",
+            )
         return
     if not x_api_key or not hmac.compare_digest(x_api_key, expected):
         raise HTTPException(status_code=401, detail="Missing or invalid API key.")

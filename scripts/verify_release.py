@@ -22,6 +22,8 @@ def verify_release(root: Path) -> list[str]:
     env_path = root / ".env.example"
     if env_path.is_file() and "AXIOMS_LLM_PROVIDER=disabled" not in env_path.read_text(encoding="utf-8"):
         errors.append(".env.example must keep AXIOMS_LLM_PROVIDER=disabled for the MVP.")
+    if env_path.is_file() and "AXIOMS_REQUIRE_AUTH=false" not in env_path.read_text(encoding="utf-8"):
+        errors.append(".env.example must keep AXIOMS_REQUIRE_AUTH=false for local development.")
     compose_path = root / "docker-compose.yml"
     if compose_path.is_file():
         compose = compose_path.read_text(encoding="utf-8")

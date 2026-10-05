@@ -12,6 +12,7 @@ from axioms.security import (
     _named_keys,
     auth_enabled,
     auth_mode,
+    auth_required,
     configured_api_key,
     require_api_key,
     require_external_provider_consent,
@@ -41,6 +42,26 @@ def test_missing_key_is_rejected_when_auth_enabled(monkeypatch) -> None:
     with pytest.raises(HTTPException) as excinfo:
         require_api_key(None)
     assert excinfo.value.status_code == 401
+
+
+def test_required_auth_fails_protected_operations_closed_when_no_key_is_configured(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_REQUIRE_AUTH", "true")
+    monkeypatch.delenv("AXIOMS_API_KEY", raising=False)
+    monkeypatch.delenv("AXIOMS_API_KEYS", raising=False)
+
+    assert auth_required() is True
+    assert auth_enabled() is True
+    assert auth_mode() == "required-unconfigured"
+    with pytest.raises(HTTPException) as excinfo:
+        require_api_key(None)
+    assert excinfo.value.status_code == 503
+
+
+def test_required_auth_accepts_a_configured_key(monkeypatch) -> None:
+    monkeypatch.setenv("AXIOMS_REQUIRE_AUTH", "yes")
+    monkeypatch.setenv("AXIOMS_API_KEY", "s3cret")
+    assert auth_mode() == "single"
+    assert require_api_key("s3cret") is None
 
 
 def test_external_provider_consent_is_required_only_for_configured_external_llms(monkeypatch) -> None:
